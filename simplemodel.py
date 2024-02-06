@@ -1,8 +1,12 @@
+#####################################################################################
+# Module for model SU(3) x SU(2) x U^3_Y(1) x U^12_B-L(1) x U^2_I3R(1) x U^1_I3R(1) #
+#####################################################################################
 import flavorstuff as fs
 import numpy as np
 
 from scipy.optimize import minimize
 
+# Initiates constants for this particular model
 def init_constants(unit = "GeV"):
     valid_units = {"GeV":1000, "TeV":1}
     try:
@@ -20,7 +24,8 @@ def init_constants(unit = "GeV"):
     v_sigma = s*10
 
     return m_U, m_D, m_E, v_chi, v_phi, v_sigma
-    
+
+# Function for minimize() that finds the gs that give the Z-boson mass
 def closest_Z_mass(gs, g, g_prim, v_chi, v_phi,v_sigma):
     conts = fs.constants()
     M_b = -1j*1/np.sqrt(2)*np.array([[-g*conts.v_H/(2), gs[0]*conts.v_H/(2), 0, 0 , 0],
@@ -32,34 +37,37 @@ def closest_Z_mass(gs, g, g_prim, v_chi, v_phi,v_sigma):
     Delta2, V = fs.gauge_boson_basis(M_b) 
     return np.abs(np.sqrt(Delta2[1]) - conts.m_Z)
 
-def build_yukawa(ys, y_3, v, v_chi, v_phi, v_sigma, m_U):
+# Builds the yukawa matrix as specified in the article
+def build_yukawa(ys, ms, vs):
     #ys = np.ones(13)
-
+    [v, v_chi, v_phi, v_sigma] = vs.flatten()
     m = np.zeros((3,3))
-    m[2,2] = v*y_3
+    m[2,2] = v*ys[0]
 
-    Delta_L = v*np.array([[ys[0], ys[1], 0],[ys[2], ys[3],0], [0,0,0]])
-    Delta_R = np.array([[0, ys[4]*v_phi, 0], [0, ys[5]*v_phi, ys[6]*v_chi], [ys[7]*v_sigma,0,0]])
-    M = np.array([[m_U, 0, ys[8]*v_phi], [0, m_U,ys[9]*v_phi], [ys[10]*v_phi, ys[11]*v_phi, m_U]])
+    Delta_L = v*np.array([[ys[1], ys[2], 0],[ys[3], ys[4],0], [0,0,0]])
+    Delta_R = np.array([[0, ys[5]*v_phi, 0], [0, ys[6]*v_phi, ys[7]*v_chi], [ys[8]*v_sigma,0,0]])
+    M = np.array([[ms[0], 0, ys[9]*v_phi], [0, ms[1],ys[10]*v_phi], [ys[11]*v_phi, ys[12]*v_phi, ms[2]]])
 
     yukawas = np.vstack((np.hstack((m, Delta_L)), np.hstack((Delta_R, M))))
 
     return yukawas
 
+# function for finding yukawa mass basis via minimize()
 def minimize_yukawas_d(ys, v_chi, v_phi, v_sigma, m_D):
     conts = fs.constants()
    
-    yukawas = build_yukawa(ys, conts.m_b/conts.v_H, conts.v_H, v_chi, v_phi, v_sigma, m_D)
+    yukawas = build_yukawa(ys,  [m_D,1.5*m_D,2*m_D],np.array([conts.v_H, v_chi, v_phi, v_sigma]))
 
     U_L, diag_yukawa, Uh_R = fs.diag_yukawa(yukawas)
 
-    return np.abs(diag_yukawa[3]-conts.m_b + diag_yukawa[4]-conts.m_s + diag_yukawa[5]-conts.m_d)
+    return np.abs((diag_yukawa[3]-conts.m_b)**2 + (diag_yukawa[4]-conts.m_s)**2 + (diag_yukawa[5]-conts.m_d)**2)
 
-def build_Q(field_type, base):
+# builds the Q for this model, given a basis, eg Z^3, Z^3'...
+def build_Q(field_type, basis):
     base_charge = [fs.find_charge("fermions", field_type, "I3"), fs.find_charge("fermions", field_type, "Y"), 
                    (fs.find_charge("fermions", field_type, "B") - fs.find_charge("fermions", field_type, "L"))/2,
                    fs.find_charge("fermions", field_type, "I3_R"), fs.find_charge("fermions", field_type, "I3_R")]
-    charges = base*base_charge
+    charges = basis*base_charge
  
     # First three regular fermoins, last three new vector-like fermions. 
     Q = charges[0] + np.diag([charges[2] + charges[3], charges[2] + charges[4], charges[1], 
@@ -77,10 +85,8 @@ if __name__ == "__main__":
 
     conts = fs.constants()
     # Basis = (W3, B1, B2, B3, B4)^T. Rows: H, chi_f, chi_l, phi, sigma
-    minim = True
-    res = minimize(closest_Z_mass, [g1,g2,g3,g4], args = (g,g_prim, v_chi, v_phi, v_sigma), method = "BFGS")#, bounds= ((0.1,2), (0.1,2), (0.1,2), (0.1,2)))
-    print(res.x)
-
+    res = minimize(closest_Z_mass, [g1,g2,g3,g4], args = (g,g_prim, v_chi, v_phi, v_sigma), method = "BFGS")
+   
     g1 = res.x[0]
     g2 = res.x[1]
     g3 = res.x[2]
@@ -93,38 +99,44 @@ if __name__ == "__main__":
                         [0,0,0,g3*v_sigma/2, -g4*v_sigma/2]])
     
     Delta2, V = fs.gauge_boson_basis(M_b)
+   
+    # Cuts off non-significant contributions, for a cleaner model
     V[np.abs(V) < 0.01] = 0 
-    #print(f"Delta_2 = {Delta2}")
-    #print(f"V = {V}")
+  
     for i in range(5):
         print(f"m = {np.sqrt(Delta2[i])}")
         print(f"V_{i} = {V[:,i]}\n")
 
     print(f"real m_Z = {conts.m_Z}. Found m_Z = {np.sqrt(Delta2[1])}")
 
-    ys = np.ones(12)*0.5
+    ys = np.ones(13)*0.5
+    ms = np.array([conts.m_d, conts.m_s, conts.m_b, m_D, 1.5*m_D, 2*m_D])
+    vs = np.array([conts.v_H, v_chi, v_phi, v_sigma])
+
+    res = minimize(minimize_yukawas_d, ys, args = (v_chi, v_phi, v_sigma, m_D), method = "BFGS")
     
-    res = minimize(minimize_yukawas_d, ys, args = (v_chi, v_phi, v_sigma, m_D), method = "BFGS")#, bounds= ((0.1,2), (0.1,2), (0.1,2), (0.1,2)))
     ys = res.x
-    yukawas = build_yukawa(ys, conts.m_b/conts.v_H, conts.v_H, v_chi, v_phi, v_sigma, m_D)
+    print(ys)
+    yukawas = build_yukawa(ys, np.array([m_D, m_D*1.5, m_D*2]), vs)
     
     U_L, diag_yukawa, Uh_R = fs.diag_yukawa(yukawas)
+    print(diag_yukawa)
 
-    #print(diag_yukawa)
-    #print([diag_yukawa[3]-conts.m_b, diag_yukawa[4]-conts.m_s, diag_yukawa[5]-conts.m_d])
+    print([diag_yukawa[3]-conts.m_b, diag_yukawa[4]-conts.m_s, diag_yukawa[5]-conts.m_d])
     
-    # Try Z^3 for down quarks, check FCNC
     base = V[:,2]
     
     Q_d_L = build_Q("d_L", base)
     Q_d_R = build_Q("d_R", base)
 
+    #TODO: Compare diagonal charges with SM
     mass_Q_d_L = fs.mass_Q(U_L, Q_d_L)
     mass_Q_d_R = fs.mass_Q(np.transpose(Uh_R), Q_d_R)
 
-    #print(mass_Q_d_L)
-    #print(mass_Q_d_R)
+    print(mass_Q_d_L)
+    print(mass_Q_d_R)
 
+    #TODO: Calculate further constants, use in minimization?
     c_sd = mass_Q_d_L[0,1]**2 + mass_Q_d_R[0,1]**2 + 2*mass_Q_d_L[0,1]*mass_Q_d_R[0,1]
     print(f"The constant for a kaon-antikaon with neutral current is: {c_sd}")
    
