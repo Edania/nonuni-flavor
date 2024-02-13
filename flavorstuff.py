@@ -36,6 +36,20 @@ class constants:
         self.m_Z = s*91.1876
         self.m_W = s*80.377
 
+        S = s*1000
+        self.Lambda_sd_2 = S*980
+        self.Lambda_sd_LR = S*18000
+        self.Lambda_cu_2 = S*1200
+        self.Lambda_cu_LR = S*6200
+        self.Lambda_bd_2 = S*510
+        self.Lambda_bd_LR = S*1900
+        self.Lambda_bs_2 = S*110
+        self.Lambda_bs_LR = S*370
+
+        self.V_CKM = [[0.97373, 0.2243, 0.00382],
+                 [0.221, 0.975, 0.0408],
+                 [0.0086, 0.0415, 1.014]]
+
 # Method for finding the gauge boson basis given an M
 def gauge_boson_basis(M):
     MT = M.conj().T
@@ -110,7 +124,10 @@ def find_yukawas(init_ys, init_sigma, a, ms, vs, build_yukawa, ms_build, nsample
 
 # Method for Diagonalizing Yukawa matrices
 def diag_yukawa(Y):
-    (U,Delta,Vh) = np.linalg.svd(Y)
+    (U,Delta_tmp,Vh) = np.linalg.svd(Y)
+    U = U[:,::-1]
+    Delta = Delta_tmp[::-1]
+    Vh = Vh[::-1,:]
     return U,Delta,Vh
 
 # Method for finding the mass basis for Q given left- or right-rotating unitary matrix
@@ -126,5 +143,8 @@ def find_charge(type_, field, charge):
     else:
         ans = int(charge_str)
     return ans
+
+def Z_coupling(g,g_prim):
+    pass
 
     
