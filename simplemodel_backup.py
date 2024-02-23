@@ -43,6 +43,20 @@ def closest_Z_mass(gs, mzs,g, vs):
     return np.sqrt(Delta2[1:]) - mzs
     #return (np.sqrt(Delta2[1]) - mzs[0])**2 + np.sum(np.sqrt(Delta2[2:]) - mzs[1:])**2 + np.sqrt(np.abs(Delta2[0])) #np.abs(np.sqrt(Delta2[1]) - conts.m_Z)
 
+def gs_eq_system(vH,vchi,vphi,vsigma,mz,mz3,mz3_prim,mz12):
+    #g,g1,g2,g3,g4,mz,mz3,mz3_prim,mz12,vH,vchi,vphi,vsigma = sp.symbols("g g1 g2 g3 g4 mz mz3 mz3_prim mz12 vH vchi vphi vsigma", real=True)
+    g,g1,g2,g3,g4 = sp.symbols("g g1 g2 g3 g4", real=True)
+    M_b = -sp.I*1/sp.sqrt(2)*sp.Matrix([[-g*vH/(2), g1*vH/(2), 0, 0 , 0],
+                        [0, -g1*vchi/6, g2*vchi/3,              0,                  0],
+                        [0, g1*vchi/2, -g2*vchi,                0,                  0],
+                        [0, g1*vphi/2,              0,-g3*vphi/2,                   0],
+                        [0, 0,                          0, g3*vsigma/2, -g4*vsigma/2]])
+    eigen_dict = M_b.singular_values()
+    print(eigen_dict)
+    eigen_vals = list(eigen_dict.keys())
+    print(eigen_vals)
+    res = sp.solve([eigen_vals[0], eigen_vals[1]-mz, eigen_vals[2]-mz3, eigen_vals[3]-mz3_prim, eigen_vals[4]-mz12], [g1,g2,g3,g4])
+    return res
  
     
 # Builds the yukawa matrix as specified in the article
@@ -130,61 +144,39 @@ def minimize_for_field(gs,ys, field, vs, Ms, ms, mzs, g, g_prim, V, Delta2):
     return min_Y + min_QZ + min_Qgamma, U_L, diag_yukawa, Uh_R
     #c_sd = (mass_Q_d_L[0,1]**2)/Delta2[1]# + mass_Q_d_R[0,1]**2 + 2*mass_Q_d_L[0,1]*mass_Q_d_R[0,1]
 
-def Q_compare(field, base, base_SM, U_L, Uh_R):
-    sm_Q_d_L = sm_Q(f"{field}_L", base_SM)
-    sm_Q_d_R = sm_Q(f"{field}_R", base_SM)
-
-    Q_d_L = np.abs(np.diag(build_Q(f"{field}_L", base)))
-    Q_d_R = np.abs(np.diag(build_Q(f"{field}_R", base)))
-
-    mass_Q_d_L = np.abs(fs.mass_Q(U_L, Q_d_L))
-    mass_Q_d_R = np.abs(fs.mass_Q(np.transpose(Uh_R), Q_d_R))
-#    print(mass_Q_d_L.shape)
-    compare_Q = np.append(np.abs(mass_Q_d_L[:3])-np.abs(sm_Q_d_L),np.abs(mass_Q_d_R[:3])-np.abs(sm_Q_d_R))
-#    print(compare_Q.shape)
-    return compare_Q
-
-
-def solve_for_ys(ys,y3_u, y3_d,vs, g, g_prim, gs, M_Us, m_us, M_Ds, m_ds, mzs):
-    ys_u = ys[:12]
-    ys_d = ys[12:]
+def minimize_for_CKM(thetas,vs, g, g_prim, M_Us, m_us, M_Ds, m_ds, mzs):
+    gs = thetas[:4]
+    ys_u = thetas[4:17]
+    ys_d = thetas[17:]
     M_b = -1j*1/np.sqrt(2)*np.array([[-g*conts.v_H/(2), gs[0]*conts.v_H/(2), 0, 0 , 0],
                         [0, -gs[0]*v_chi/6, gs[1]*v_chi/3, 0,0],
                         [0,gs[0]*v_chi/2, -gs[1]*v_chi, 0,0],
                         [0, gs[0]*v_phi/2,0,-gs[2]*v_phi/2,0],
                         [0,0,0,gs[2]*v_sigma/2, -gs[3]*v_sigma/2]])
     
-    Delta2, V = fs.gauge_boson_basis(M_b)    
+    Delta2, V = fs.gauge_boson_basis(M_b)
+    min_Z = np.sum((np.sqrt(Delta2[1:]) - mzs)**2)
+    min_gamma = (np.sqrt(np.abs(Delta2[0])))**2
+    
     # Cuts off non-significant contributions, for a cleaner model
     V[np.abs(V) < 0.01] = 0 
 
-    yukawas_u = build_yukawa(np.insert(ys_u, 0, y3_u), M_Us, vs)
-    yukawas_d = build_yukawa(np.insert(ys_d, 0, y3_d), M_Ds, vs)
+    min_u, U_uL, diag_yukawa_u, Uh_uR = minimize_for_field(gs, ys_u,"u", vs, M_Us, m_us, mzs, g, g_prim, V, Delta2)
+    min_d, Ud_L, diag_yukawa_d, Uh_dR = minimize_for_field(gs, ys_d,"d", vs, M_Ds, m_ds, mzs, g, g_prim, V, Delta2)
+    V_CKM_calc = np.dot(np.transpose(U_uL), Ud_L) 
 
-    U_u_L, diag_yukawa_u, Uh_u_R = fs.diag_yukawa(yukawas_u)
-    U_d_L, diag_yukawa_d, Uh_d_R = fs.diag_yukawa(yukawas_d)
-
-    m_u_compare = np.concatenate((diag_yukawa_u[:3] - m_us,diag_yukawa_u[3:] - M_Us))
-    m_d_compare = np.concatenate((diag_yukawa_d[:3] - m_ds,diag_yukawa_d[3:] - M_Ds))
-
-    base_SM_Z = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
-    base_SM_gamma = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
-
-    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
-                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
- #   print(compare_Qs.shape)
-    
-    V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
-    CKM_compare = (V_CKM_calc[:3,:3]-conts.V_CKM).flatten()
-    #print(CKM_compare)
-    #Scale according to order?
-    compares = np.concatenate((CKM_compare, compare_Qs, m_u_compare, m_d_compare))
-
-    return compares
+    min_V_CKM =np.sum((conts.V_CKM - np.abs(V_CKM_calc[:3,:3]))**2)
+    #print(min_V_CKM)
+    return min_V_CKM + min_u + min_d + min_Z + min_gamma
 
 def LCB(mean, var, beta):
     std_dev = np.sqrt(var)
     return -mean + beta * std_dev
+
+def mean_variance_2_G_alpha_beta(mean,variance):
+    alpha = mean**2/variance
+    beta = variance/mean
+    return alpha, beta
 
 def global_min_GP(model, train_points, beta,vs, g, g_prim, M_Us, m_us, M_Ds, m_ds, mzs, tol = 1e-3, max_iters = 100):
     # Bayesian opt.
@@ -233,10 +225,108 @@ def global_min_GP(model, train_points, beta,vs, g, g_prim, M_Us, m_us, M_Ds, m_d
         previous_point = new_point
 
     return iter, np.array(sampled_points), np.array(sampled_minim)
+if __name__ == "__main__":
 
-def get_g_models(search_for_gs = False):
+    m_U, m_D, m_E, v_chi, v_phi, v_sigma = init_constants()
+    g = 0.652
+    g_prim = 0.357
 
-    if search_for_gs:
+    m_Z3s = np.linspace(4000,8000,100)
+    m_Z3 = 5000
+    m_Z3prim = m_Z3*3
+    m_Z12 = m_Z3*11
+    
+    v_chi = 0.1*m_Z3
+    v_phi = 0.1*m_Z3prim
+    v_sigma = 0.1*m_Z12
+
+    mzs = np.array([conts.m_Z, m_Z3, m_Z3prim, m_Z12])
+    
+    m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
+    M_Ds = np.array([m_D, 1.5*m_D, 10*m_D])
+    m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
+    M_Us = np.array([m_U, 1.5*m_U, 10*m_U])
+    
+    vs = np.array([conts.v_H, v_chi, v_phi, v_sigma])
+
+
+    local_minimization = False
+    global_minimization = False
+    search_for_gs = False
+    gs = np.array([0.1,0.02,1.1,0.35])
+    ys = np.ones(13)*0.05
+    thetas = np.hstack((gs,ys))
+    thetas = np.hstack((thetas,ys))
+        
+    if local_minimization:
+        # MZ > 4 TeV
+        # Basis = (W3, B1, B2, B3, B4)^T. Rows: H, chi_f, chi_l, phi, sigma
+        #res = minimize(closest_Z_mass, gs, args = (mzs,g, vs), method = "L-BFGS-B", bounds= ((0,2),(0,2),(0,2),(0,2)))
+
+        #gs = res.x
+        #print(gs)
+        
+        #res = minimize(minimize_all, thetas,args=("d",vs,Ms,ms, mzs, g, g_prim),bounds= ((0,2),(0,2),(0,2),(0,2),(0,1000),(0,1000),(0,1000),(0,1000),
+        #                                                                               (0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000)))
+        res = minimize(minimize_for_CKM, thetas,args=(vs, g, g_prim, M_Us,m_us, M_Ds, m_ds, mzs),bounds= ((0,2),(0,2),(0,2),(0,2),(0,1000),(0,1000),(0,1000),(0,1000),
+                                                                                    (0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),
+                                                                                        (0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000)))
+        gs = res.x[:4]
+        ys = res.x[17:]
+
+    elif global_minimization:
+
+        train_points = 100
+        train_thetas = np.random.uniform(0,2,(train_points, len(thetas)))
+        train_minima = np.zeros((train_points, 1))
+        for i in range(train_points):
+            res = minimize(minimize_for_CKM, train_thetas[i,:],args=(vs, g, g_prim, M_Us,m_us, M_Ds, m_ds, mzs),bounds= ((0,2),(0,2),(0,2),(0,2),(0,1000),(0,1000),(0,1000),(0,1000),
+                                                                                    (0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),
+                                                                                        (0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000)))
+            train_thetas[i,:] = res.x
+            train_minima[i] = minimize_for_CKM(train_thetas[i],vs, g, g_prim, M_Us, m_us, M_Ds, m_ds, mzs)
+
+
+        #kernel = GPy.kern.RBF(input_dim=len(thetas))
+        #k1['lengthscale'].set_prior(GPy.priors.Gamma(a=l_a, b=l_b))
+        #k1['variance'].constrain_bounded(0.2*true_var, 1.8*true_var)
+        #For some reason, the prior doesn't work?
+        #k1['variance'].set_prior(GPy.priors.InverseGamma(a=v_a, b=1/v_b))
+        #k1['lengthscale'].constrain_bounded(0.1, 5)
+        #k2 = GPy.kern.Bias(input_dim=len(thetas))
+        #kernel = k1 + k2
+        #model = GPy.models.GPRegression(train_thetas, train_minima, kernel)
+        #beta = 2
+        #model.optimize()
+        #iter, sampled_points, sampled_minimina = global_min_GP(model, train_thetas, beta,vs, g, g_prim, M_Us, 
+        #                                                       m_us, M_Ds, m_ds, mzs, tol = 1e-3, max_iters = 10)
+        #iter, theta_points, minimina = global_min_GP(model,X, optimal_x, optimal_y, beta, 300)
+    
+        #thetas = sampled_points[-1,:]
+        thetas = train_thetas[np.argmin([train_minima]),:]
+        gs = thetas[:4]
+        ys = thetas[17:]
+
+    elif search_for_gs:
+        '''
+        v_chis = np.arange(1000,10000,100)
+        v_phis = np.arange(1000,10000,100)
+        v_sigmas = np.arange(10000,100000,1000)
+        m_Z3s = np.arange(1000,10000,100)
+        m_Z3_prims = np.arange(1000,10000,100)
+        m_Z12s = np.arange(10000,100000,1000)
+        X_vchi, X_vphi, X_vsigma, X_z3, X_z3prim, X_z12 = np.meshgrid(v_chis, v_phis, v_sigmas, m_Z3s, m_Z3_prims, m_Z12s)
+        # Conditions:
+        c1 = 10*X_vchi <= X_vsigma
+        c2 = 10*X_vphi <= X_vsigma
+        c3 = X_z3/X_vchi < 2
+        c4 = X_z3prim/X_vphi < 2
+        c5 = X_z12/X_vsigma < 2
+        c6 = 10*X_z3 <= X_z12
+        c7 = 10*X_z3prim <= X_z12
+        print(c1)
+        #cond = c1+c2+c3+c4+c5+c6+c7
+        '''
         v_chis = np.arange(1000,10000,10)
         m_Z3s = np.arange(1000,10000,10)
         model_list = []
@@ -254,6 +344,13 @@ def get_g_models(search_for_gs = False):
                 mzs = np.array([conts.m_Z, m_Z3, m_Z3prim, m_Z12])
                 #res = gs_eq_system(*vs, *mzs)
                 gs, infodict,ier,mesg = fsolve(closest_Z_mass, gs,args=(mzs, g, vs), full_output=True, factor = 0.1)
+                #res = least_squares(closest_Z_mass, gs, args=(mzs, g, vs), x_scale = 'jac',method = 'dogbox',bounds=((0,0,0,0),(10,10,10,10)))
+                #print(res)
+                #print(infodict)
+                #print(mesg)
+                #gs = res.x
+                #gs = res.x
+                #print(f"gs: {gs}")
                 diff = infodict["fvec"]
                 if all(gs <= 2)  and all(gs > 0.01) and all(np.abs(diff) < 1e-2 ):
                     tmp_list = [mzs, vs, gs]
@@ -266,54 +363,20 @@ def get_g_models(search_for_gs = False):
                     print(f"Diff m_Zs = {diff}")
         if model_list:
             np.savez("g_models.npz", *model_list)
+            #f = open("g_models.json", 'w')
+            #json.dump(model_list, f)        
+            #f.close()
     
-    g_models = np.load("g_models.npz")
-    model_list = [g_models[k] for k in g_models]
-    print(f"The number of g_models is: {len(model_list)}")
+    else:
+        g_models = np.load("g_models.npz")
+        model_list = [g_models[k] for k in g_models]
+        print(f"The number of g_models is: {len(model_list)}")
+#        gs = model_list[0][2,:]
+#        vs = model_list[0][1,:]
+#        mzs = model_list[0][0,:]
+#        print(gs)
+#        print(vs)
 
-    return model_list
-
-
-if __name__ == "__main__":
-
-    m_U, m_D, m_E, v_chi, v_phi, v_sigma = init_constants()
-    g = 0.652
-    g_prim = 0.357
-    
-    # Get models for gs
-    search_for_gs = False
-    plotting = False
-
-    model_list = get_g_models()
-
-
-    if plotting:
-        v_chi_list = [model[1,1] for model in model_list]
-        m_z3_list = [model[0,1] for model in model_list]
-
-        fig = plt.figure()
-        plt.scatter(v_chi_list, m_z3_list)
-        plt.title("Correlation between v_chi and m_z3 for valid gs")
-        plt.xlabel("v_chi")
-        plt.ylabel("m_z3")
-        plt.show()
-
-    y3_u = conts.m_t/conts.v_H
-    y3_d = conts.m_b/conts.v_H
-    mzs = model_list[0][0,:]
-    vs = model_list[0][1,:]
-    gs = model_list[0][2,:]
-    
-    m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
-    M_Ds = np.array([m_D, 1.5*m_D, 10*m_D])
-    m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
-    M_Us = np.array([m_U, 1.5*m_U, 10*m_U])
-    ys = np.ones(24)*0.05
-
-    res = least_squares(solve_for_ys, ys, args=(y3_u,y3_d,vs,g,g_prim,gs,M_Us,m_us,M_Ds,m_ds,mzs), loss = "soft_l1")
-    ys = res.x
-    print(res.message)
-    print(res.cost)
     M_b = -1j*1/np.sqrt(2)*np.array([[-g*conts.v_H/(2), gs[0]*conts.v_H/(2), 0, 0 , 0],
                         [0, -gs[0]*vs[1]/6, gs[1]*vs[1]/3, 0,0],
                         [0,gs[0]*vs[1]/2, -gs[1]*vs[1], 0,0],
@@ -325,19 +388,26 @@ if __name__ == "__main__":
     # Cuts off non-significant contributions, for a cleaner model
     V[np.abs(V) < 0.01] = 0 
 
-    y_ds = ys[12:]
-    y_us = ys[:12]
-    yukawas = build_yukawa(np.insert(y3_d, 0, y_ds), M_Ds, vs)
+    for i in range(5):
+        print(f"m = {np.sqrt(np.abs(Delta2[i]))}")
+        print(f"V_{i} = {V[:,i]}\n")
 
+    print(f"real m_Z = {conts.m_Z}. Found m_Z = {np.sqrt(Delta2[1])}")
+    print(f"Diff m_Zs = {mzs-np.sqrt(Delta2[1:])}")
+   
+    #res = minimize(minimize_yukawas, ys, args = (ms,Ms, vs), method = "BFGS")
+    
+    #ys = res.x
+    #print(ys)
+'''
+    print(f"ys:{ys}")
+    yukawas = build_yukawa(ys, M_Ds, vs)
+    
     U_L, diag_yukawa, Uh_R = fs.diag_yukawa(yukawas)
-    print(f"mds diffs: {diag_yukawa[:3]-m_ds}, MDs diffs: {diag_yukawa[3:]-M_Ds}")
- #   print([diag_yukawa[0]-conts.m_d, diag_yukawa[1]-conts.m_s, diag_yukawa[2]-conts.m_b])
-    yukawas = build_yukawa(np.insert(y3_u, 0, y_us), M_Us, vs)
-    U_u_L, diag_yukawa, Uh_u_R = fs.diag_yukawa(yukawas)
+    print(diag_yukawa)
 
-    V_CKM_calc = np.dot(np.transpose(U_u_L), U_L) 
-    CKM_compare = (V_CKM_calc[:3,:3]-conts.V_CKM).flatten()
-    print(f"CKM compare: {CKM_compare}")
+    print([diag_yukawa[0]-conts.m_d, diag_yukawa[1]-conts.m_s, diag_yukawa[2]-conts.m_b])
+    
     base = V[:,1]
     base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
     
@@ -354,29 +424,10 @@ if __name__ == "__main__":
 
     #print(mass_Q_d_L)
     #print(sm_Q_d_L)
-    print(sm_Q_d_L)
-    print(mass_Q_d_L)
-    print(f"Charge difference: {np.diag(np.abs(mass_Q_d_L[:3])) - np.diag(np.abs(sm_Q_d_L))}")
+    print(np.abs(np.diag(mass_Q_d_L[:3])) - np.abs(np.diag(sm_Q_d_L)))
     #print(mass_Q_d_R)
 
     #TODO: Calculate further constants, use in minimization?
     c_sd = (mass_Q_d_L[0,1]**2)/Delta2[1]# + mass_Q_d_R[0,1]**2 + 2*mass_Q_d_L[0,1]*mass_Q_d_R[0,1]
     print(f"The constant for a kaon-antikaon with neutral current is: {c_sd}")
-
-    # Get models for ys (depends on gs)
-#        print(gs)
-#        print(vs)
-
-'''
-    for i in range(5):
-        print(f"m = {np.sqrt(np.abs(Delta2[i]))}")
-        print(f"V_{i} = {V[:,i]}\n")
-
-    print(f"real m_Z = {conts.m_Z}. Found m_Z = {np.sqrt(Delta2[1])}")
-    print(f"Diff m_Zs = {mzs-np.sqrt(Delta2[1:])}")
-
-
-   
-    print(f"ys:{ys}")
-    
 '''   
