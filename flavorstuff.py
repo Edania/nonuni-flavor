@@ -49,6 +49,10 @@ class constants:
         self.V_CKM = [[0.97373, 0.2243, 0.00382],
                  [0.221, 0.975, 0.0408],
                  [0.0086, 0.0415, 1.014]]
+        
+        self.sw2 =  0.2229
+        self.alpha = 1/137.035999180
+        self.e_em = np.sqrt(4*np.pi*self.alpha)
 
 # Method for finding the gauge boson basis given an M
 def gauge_boson_basis(M):
