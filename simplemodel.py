@@ -9,7 +9,7 @@ import json
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from scipy.optimize import minimize, fsolve, least_squares
+from scipy.optimize import minimize, fsolve, least_squares, curve_fit
 from scipy.stats import linregress
 conts = fs.constants()
 
@@ -31,6 +31,10 @@ def init_constants(unit = "GeV"):
     v_sigma = s*10
 
     return m_U, m_D, m_E, v_chi, v_phi, v_sigma
+
+def get_lambda_limits():
+    real_Lambda_effs = np.array([980, 18000, 1200, 6200, 510, 1900, 110, 370])
+    return real_Lambda_effs
 
 def build_M_b(g,gs,vs):
     M_b = -1j*1/np.sqrt(2)*np.array([[-g*vs[0]/(2), gs[0]*vs[0]/(2), 0, 0 , 0],
@@ -142,9 +146,12 @@ def Q_compare(field, base, base_SM, U_L, Uh_R):
     Q_d_L = build_Q(f"{field}_L", base)
     Q_d_R = build_Q(f"{field}_R", base)
 
-    mass_Q_d_L = np.abs(np.diag(fs.mass_Q(U_L, Q_d_L)))
-    mass_Q_d_R = np.abs(np.diag(fs.mass_Q(np.transpose(Uh_R), Q_d_R)))
-    compare_Q = np.append(np.abs(mass_Q_d_L[:3])-np.abs(sm_Q_d_L),np.abs(mass_Q_d_R[:3])-np.abs(sm_Q_d_R))
+    mass_Q_d_L = np.abs(fs.mass_Q(U_L, Q_d_L))
+    mass_Q_d_R = np.abs(fs.mass_Q(np.transpose(Uh_R), Q_d_R))
+    compare_Q = np.append(np.diag(mass_Q_d_L)[:3]-np.abs(sm_Q_d_L),np.diag(mass_Q_d_R)[:3]-np.abs(sm_Q_d_R))
+    compare_Q = np.append(compare_Q, mass_Q_d_L[0,1])
+    compare_Q = np.append(compare_Q, mass_Q_d_L[0,2])
+    compare_Q = np.append(compare_Q, mass_Q_d_L[1,2])
     return compare_Q
 
 
@@ -189,8 +196,9 @@ def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, g, g_prim, V, M_Us, m_us, M_Ds, m_ds, 
     #     print(compare_Qs)
     #     return 1000
     
-    compares = np.concatenate((CKM_compare, compare_Qs, m_u_compare, m_d_compare))
+    #compares = np.concatenate((CKM_compare, compare_Qs, m_u_compare, m_d_compare))
     #compares = np.concatenate((CKM_compare, compare_Qs))
+    compares = np.concatenate((CKM_compare, m_u_compare, m_d_compare))
     return compares
 
 def wrapper_solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, g, g_prim, V, M_Us, m_us, M_Ds, m_ds, mzs):
@@ -368,7 +376,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                     mass_Q_d_R = np.diag(fs.mass_Q(np.transpose(Uh_d_R), Q_d_R))
                     print(f"Charge difference L: {np.abs(mass_Q_d_L[:3]) - np.abs(sm_Q_d_L)}")
                     print(f"Charge difference R: {np.abs(mass_Q_d_R[:3]) - np.abs(sm_Q_d_R)}")
-
+                    print(fs.mass_Q(U_d_L, Q_d_L))
                     tmp_list = [y_us, y_ds, M_Us, tan_beta, g_idx]
                     print(f"y_us: {y_us}\n y_ds: {y_ds}\n M_Us: {real_M_Us}\n M_Ds: {real_M_Ds}\n tan_beta = {tan_beta}\n g_idx = {g_idx}")
                     model_list.extend(tmp_list)
@@ -446,6 +454,7 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
             #TODO: Compare diagonal charges with SM
             mass_Q_d_L = np.diag(fs.mass_Q(U_d_L, Q_d_L))
             mass_Q_d_R = np.diag(fs.mass_Q(np.transpose(Uh_d_R), Q_d_R))
+            print(fs.mass_Q(U_d_L, Q_d_L))
             print(f"Charge difference L: {np.abs(mass_Q_d_L[:3]) - np.abs(sm_Q_d_L)}")
             print(f"Charge difference R: {np.abs(mass_Q_d_R[:3]) - np.abs(sm_Q_d_R)}")
 
@@ -469,24 +478,22 @@ if __name__ == "__main__":
     
     # According to definition
     g = conts.e_em/np.sqrt(conts.sw2)
-    #print(g)
     g_prim = conts.e_em/np.sqrt(1-conts.sw2)
-    #print(g_prim)
     #g = 0.652 
     #g_prim = 0.357
     
     # Get models for gs
     search_for_gs = False
     search_for_ys = False
-    plotting = True
-
+    g_plotting = False
+    y_plotting = True
     g_model_list = get_g_models("correct_g_models.npz", g, search_for_gs)
 
     #g_model_list = g_model_list[1000:]
 
     y_model_list = get_y_models("correct_y_models_again.npz", search_for_ys, g_model_list, cost_tol=0.5, max_iters=10, m_repeats=30)
 
-    #y_model_list = refine_y_models("correct_refined_y_models.npz", y_model_list, g_model_list, cost_tol=0.3, max_iters=1000)
+    #y_model_list = refine_y_models("correct_refined_y_models.npz", y_model_list, g_model_list, cost_tol=1, max_iters=100)
 
     #y_model = y_model_list[0]
 
@@ -495,11 +502,69 @@ if __name__ == "__main__":
 
     # FINALLY: Find the FCNC Wilson Coeffs
 
-    if plotting:
+    # g_model = g_model_list[2]
+    # M_b = build_M_b(g, g_model[2], g_model[1])
+    # (U, S, Vd) = np.linalg.svd(-1j*M_b)
+    # print(np.real(np.dot(U, Vd)))
+    # print(np.real(np.linalg.eigvals(-1j*M_b)))
+    # print(np.linalg.svd(M_b)[1])
+    # print(np.sort(np.real(np.linalg.eigvals(-1j*M_b)))-np.sort(np.linalg.svd(M_b)[1]))
+    # print(np.array(g_model[2])*np.array(g_model[1])/np.sqrt(2))
+    # print([(g_model[2][0]+g_model[2][1])*g_model[1][1]/np.sqrt(2), g_model[2][2]*g_model[1][2]/np.sqrt(2), g_model[2][3]*g_model[1][3]/np.sqrt(2)])
+
+    if g_plotting:
+        f  = open("saved_g_regrs.txt", "w")
+        g1_list = [model[2,0] for model in g_model_list]
+        g2_list = [model[2,1] for model in g_model_list]
+        #print(np.array(g1_list) - np.array(g2_list))
+        #print(g_list)
+        #print(np.sqrt(2)*conts.m_Z/conts.v_H)
+        v_strings = ["\chi", "\phi", "\sigma"]
+        m_strings = ["Z_3", "Z_3'", "Z_{12}"]
+        #f.write(f"g2 : {res.slope}\n")
+        for i in range(1,4):
+            v_list = [model[1,i] for model in g_model_list]
+            m_list = [model[0,i] for model in g_model_list]
+            #res = linregress(v_list, m_list)
+            
+            # I guess we'll continue the optimization
+
+            v_s = np.array(v_list)
+            m_zs = np.array(m_list)
+
+            res = curve_fit(lambda x, m: m*x, v_s, m_zs)
+            v_chi_lin = np.linspace(np.min(v_s), np.max(v_s), 10000)
+            stderr = np.sqrt(np.diag(res[1]))
+            slope = res[0][0]
+
+            fig = plt.figure(figsize=(3.5,3))
+            plt.scatter(v_s/1000, m_zs/1000, s = 2, label = "Data pts", zorder = 1)
+            #plt.errorbar(v_chi_uniq, m_z3_means, yerr=m_z3_vars, fmt = ".")
+            plt.plot(v_chi_lin/1000, v_chi_lin*slope/1000, "r", label = f"Regr, g = {slope:.3f}", zorder = 2)
+            plt.fill_between(v_chi_lin/1000, v_chi_lin*(slope - stderr)/1000, v_chi_lin*(slope + stderr)/1000, alpha = 0.5, color = "r",zorder=3)
+            #plt.plot(v_chi_lin, v_chi_lin*(np.mean(g2_list)), "g")
+            plt.title(r"Correlation between $v_" + v_strings[i-1] + r"$ and $m_{" + m_strings[i-1] + r"}$")
+            plt.xlabel(r"$v_" + v_strings[i-1] + r"$ [TeV]")
+            plt.ylabel(r"$m_{" + m_strings[i-1] + r"}$ [TeV]")
+            plt.legend()
+            plt.tight_layout()
+            plt.savefig(f"figs/v_m_{i}.png")
+            f.write(f"g{i+1} : {slope}\n")
+        
+            #m_123_list = [model[2] for model in y_model_list] 
+        f.close()
+        
+        # Save every g regression
+        #g1_list = [model[2,2] for model in g_model_list]        
+        
+    if y_plotting:
         m_u_list = []
         tan_beta_list = []
         charge_diff_list = []
+        Lambda_effs_list = [[],[],[],[]]
 
+        # y_model_list = [y_model_list[5]]
+        real_Lambda_effs = get_lambda_limits()
         for y_model in y_model_list:
             tan_beta= y_model[3]
             g_idx = y_model[4]
@@ -524,80 +589,77 @@ if __name__ == "__main__":
             m_u_list.append(real_M_Us[0])
             tan_beta_list.append(int(tan_beta))
             m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
-            m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
-
-            #print(f"mds diffs: {diag_yukawa_d[:3]-m_ds}")
-            #print(f"mus diffs: {diag_yukawa_u[:3]-m_us}")
-            # Check CKM and charges for good measure
-            V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
-            #print(V_CKM_calc[:3,:3])
-            #print(conts.V_CKM)
-            CKM_compare = (np.abs(V_CKM_calc[:3,:3])-np.abs(conts.V_CKM)).flatten()
-            #print(f"CKM compare: {CKM_compare}")
-            
-            base = V[:,1]
-            #base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
-        
+            m_us = np.array([conts.m_u, conts.m_c, conts.m_t])        
             base_SM = np.array([1, -conts.sw2])
-            # base_SM_gamma = np.array([0, conts.e_em])
-            # base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
             sm_Q_d_L = np.diag(sm_Q("d_L", base_SM))
             sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
-            #print(sm_Q_d_L)
-            #print(sm_Q_d_R)
-            Q_d_L = build_Q("d_L", base)
-            Q_d_R = build_Q("d_R", base)
 
-            #TODO: Compare diagonal charges with SM
-            mass_Q_d_L = np.diag(fs.mass_Q(U_d_L, Q_d_L))
-            mass_Q_d_R = np.diag(fs.mass_Q(np.transpose(Uh_d_R), Q_d_R))
+            for k in range(1,5):
+                base = V[:,k]
+                Q_d_L = build_Q("d_L", base)
+                Q_d_R = build_Q("d_R", base)
 
-            #TODO: CKM matrix!
+                Q_u_L = build_Q("u_L", base)
+                Q_u_R = build_Q("u_R", base)
 
-            #print(mass_Q_d_L)
-            #print(sm_Q_d_L)
-            #print(mass_Q_d_R)
-            #print(sm_Q_d_R)
-            #print(f"Charge difference L: {np.abs(mass_Q_d_L[:3]) - np.abs(sm_Q_d_L)}")
-            #print(f"Charge difference R: {np.abs(mass_Q_d_R[:3]) - np.abs(sm_Q_d_R)}")
-            charge_diff_list.append((np.abs(mass_Q_d_L[:3]) - np.abs(sm_Q_d_L))[2])
-            #print(mass_Q_d_R)
+                mass_Q_d_L = fs.mass_Q(U_d_L, Q_d_L)
+                mass_Q_d_R = fs.mass_Q(np.transpose(Uh_d_R), Q_d_R)
+
+                mass_Q_u_L = fs.mass_Q(U_u_L, Q_u_L)
+                mass_Q_u_R = fs.mass_Q(np.transpose(Uh_u_R), Q_u_R)
+                #print(mass_Q_d_L)
+                # Same order as in table
+                cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_d_L[0,1]*mass_Q_d_R[0,1], mass_Q_u_L[0,1]**2, 
+                               mass_Q_u_L[0,1]*mass_Q_u_R[0,1], mass_Q_d_L[0,2]**2, mass_Q_d_L[0,2]*mass_Q_d_R[0,2],
+                               mass_Q_d_L[1,2]**2, mass_Q_d_L[1,2]*mass_Q_d_R[1,2]])
+                #Absolute value ok?
+                cs = np.abs(cs)/(Delta2[k]/(1000**2))
+                
+                Lambda_effs_list[k-1].append(np.sqrt(1/cs))
+            g_idx_list = [int(model[4]) for model in y_model_list]
+        Z_strings = ["Z", "Z_3", "Z_3'", "Z_{12}"]
+        c_strings = ["\Lambda^{sd}_{LL}", "\Lambda^{sd}_{LR}", "\Lambda^{uc}_{LL}", "\Lambda^{uc}_{LR}", "\Lambda^{bd}_{LL}",
+                     "\Lambda^{bd}_{LR}", "\Lambda^{bs}_{LL}","\Lambda^{bs}_{LR}"]
+        simp_c_strings = ["sd_LL", "sd_LR", "uc_LL", "uc_LR", "bd_LL", "bd_LR", "bs_LL", "bs_LR"]
+        fig, axs = plt.subplots(2,4,figsize=(7,5))
+        lines = [None]*5
+        for n in range(8):
+            if n > 3:
+               r = 1
+               xn = n-4
+            else:
+                r = 0
+                xn = n 
+            #fig = plt.figure(figsize=(3.5,3))
+            for k in range(1,5):
+                Lambda_effs = np.array(Lambda_effs_list[k-1])
+                line = axs[r,xn].scatter(np.arange(0,len(y_model_list)),Lambda_effs[:,n], s = 2, label = f"${Z_strings[k-1]}$")
+                lines[k-1] = line
+            line = axs[r,xn].hlines(real_Lambda_effs[n], 0, len(y_model_list), color = "black", label = "Limit")
+            lines[4] = line
+            #plt.scatter(tan_beta_list, m_u_list)
+            #plt.scatter(np.array(v_chi_list)[g_idx_list], m_u_list, s = 2)
+            #axs[r,xn].set_title(f"${c_strings[n]}$" )
+            axs[r,xn].set_xlabel("y-model index")
+            axs[r,xn].set_ylabel(f"${c_strings[n]}$ [log(TeV)]")
+            axs[r,xn].set_yscale("log")
+
+            #plt.ylim(0,10000)
+            # if n == 6:
+            #     axs[r,xn].legend(loc='lower center', bbox_to_anchor = (0,-1), ncol=5)
+            # #axs[n].tight_layout()
+        plt.suptitle("Each $\Lambda_{eff}$ for each y-model and neutral masssive boson")
+        #plt.legend(loc='upper center', bbox_to_anchor=(0.1, -0.8), ncol=5)
+        fig.legend(handles = lines, loc = "lower center", ncols = 5, bbox_to_anchor = (0.5,0))
+        plt.tight_layout(rect=[0, 0.05, 1, 1])
+        plt.savefig(f"figs/Lambda_effs_all.png")
+        #plt.savefig(f"figs/Lambda_effs_{simp_c_strings[n]}.png")
 
             #TODO: Calculate further constants, use in minimization?
             #c_sd = (mass_Q_d_L[0,1]**2)/Delta2[1]# + mass_Q_d_R[0,1]**2 + 2*mass_Q_d_L[0,1]*mass_Q_d_R[0,1]
             #print(f"The constant for a kaon-antikaon with neutral current is: {c_sd}")
-        
-        # I guess we'll continue the optimization
-        #print(np.min(np.abs(charge_diff_list)))
-        v_chi_list = [model[1,1] for model in g_model_list]
-        m_z3_list = [model[0,1] for model in g_model_list]
 
-        res = linregress(v_chi_list, m_z3_list)
-        v_chi_lin = np.linspace(v_chi_list[0], v_chi_list[-1], 10000)
-        #m_z3_lin = np.linspace(m_z3_list[0], m_z3_list[-1], 10000)
 
-        fig = plt.figure()
-        plt.scatter(v_chi_list, m_z3_list, s = 2, label = "Data pts", zorder = 1)
-        plt.plot(v_chi_lin, v_chi_lin*res.slope + res.intercept, "r", label = "Regr", zorder = 2)
-        plt.title(r"Correlation between $v_\chi$ and $m_{Z^3}$")
-        plt.xlabel(r"$v_\chi$ [GeV]")
-        plt.ylabel(r"$m_{Z^3}$ [GeV]")
-        plt.legend()
-        plt.savefig("figs/v_chi_m_z3.png")
-        #m_123_list = [model[2] for model in y_model_list]
-        
-        
-        g_idx_list = [int(model[4]) for model in y_model_list]
-        #print(g_idx_list)
-        fig = plt.figure()
-        #plt.scatter(tan_beta_list, m_u_list)
-        plt.scatter(np.array(v_chi_list)[g_idx_list], m_u_list, s = 2)
-        plt.title("Correlation between v_chi and M_U1 for valid ys")
-        plt.xlabel("v_chi")
-        plt.ylabel("M_U1")
-        plt.ylim(0,10000)
-        plt.savefig("figs/v_chi_M_U1.png")
-        
     '''
                 yukawas = build_yukawa(np.insert(y_ds, 0, y3_d), M_Ds, vs)
 
