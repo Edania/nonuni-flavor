@@ -44,19 +44,20 @@ def closest_Z_mass(gs, mzs,g, vs):
     #return (np.sqrt(Delta2[1]) - mzs[0])**2 + np.sum(np.sqrt(Delta2[2:]) - mzs[1:])**2 + np.sqrt(np.abs(Delta2[0])) #np.abs(np.sqrt(Delta2[1]) - conts.m_Z)
 
 def gs_eq_system(vH,vchi,vphi,vsigma,mz,mz3,mz3_prim,mz12):
-    #g,g1,g2,g3,g4,mz,mz3,mz3_prim,mz12,vH,vchi,vphi,vsigma = sp.symbols("g g1 g2 g3 g4 mz mz3 mz3_prim mz12 vH vchi vphi vsigma", real=True)
-    g,g1,g2,g3,g4 = sp.symbols("g g1 g2 g3 g4", real=True)
+    g,g1,g2,g3,g4,mz,mz3,mz3_prim,mz12,vH,vchi,vphi,vsigma = sp.symbols("g g1 g2 g3 g4 mz mz3 mz3_prim mz12 vH vchi vphi vsigma", real=True)
+    #g,g1,g2,g3,g4 = sp.symbols("g g1 g2 g3 g4", real=True)
     M_b = -sp.I*1/sp.sqrt(2)*sp.Matrix([[-g*vH/(2), g1*vH/(2), 0, 0 , 0],
                         [0, -g1*vchi/6, g2*vchi/3,              0,                  0],
                         [0, g1*vchi/2, -g2*vchi,                0,                  0],
                         [0, g1*vphi/2,              0,-g3*vphi/2,                   0],
                         [0, 0,                          0, g3*vsigma/2, -g4*vsigma/2]])
-    eigen_dict = M_b.singular_values()
-    print(eigen_dict)
-    eigen_vals = list(eigen_dict.keys())
-    print(eigen_vals)
-    res = sp.solve([eigen_vals[0], eigen_vals[1]-mz, eigen_vals[2]-mz3, eigen_vals[3]-mz3_prim, eigen_vals[4]-mz12], [g1,g2,g3,g4])
-    return res
+    print(M_b.H*M_b)
+#     eigen_dict = M_b.singular_values()
+#  #   print(eigen_dict)
+#     eigen_vals = list(eigen_dict.keys())
+#  #   print(eigen_vals)
+#     res = sp.solve([eigen_vals[0], eigen_vals[1]-mz, eigen_vals[2]-mz3, eigen_vals[3]-mz3_prim, eigen_vals[4]-mz12], [g1,g2,g3,g4])
+#     return res
  
     
 # Builds the yukawa matrix as specified in the article
@@ -226,7 +227,6 @@ def global_min_GP(model, train_points, beta,vs, g, g_prim, M_Us, m_us, M_Ds, m_d
 
     return iter, np.array(sampled_points), np.array(sampled_minim)
 if __name__ == "__main__":
-
     m_U, m_D, m_E, v_chi, v_phi, v_sigma = init_constants()
     g = 0.652
     g_prim = 0.357
@@ -235,20 +235,23 @@ if __name__ == "__main__":
     m_Z3 = 5000
     m_Z3prim = m_Z3*3
     m_Z12 = m_Z3*11
-    
+
     v_chi = 0.1*m_Z3
     v_phi = 0.1*m_Z3prim
     v_sigma = 0.1*m_Z12
 
     mzs = np.array([conts.m_Z, m_Z3, m_Z3prim, m_Z12])
-    
+
     m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
     M_Ds = np.array([m_D, 1.5*m_D, 10*m_D])
     m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
     M_Us = np.array([m_U, 1.5*m_U, 10*m_U])
-    
-    vs = np.array([conts.v_H, v_chi, v_phi, v_sigma])
 
+    vs = np.array([conts.v_H, v_chi, v_phi, v_sigma])
+    gs_eq_system(vs[0],vs[1],vs[2],vs[3],mzs[0],mzs[1],mzs[2],mzs[3])
+
+
+'''
 
     local_minimization = False
     global_minimization = False
@@ -308,7 +311,7 @@ if __name__ == "__main__":
         ys = thetas[17:]
 
     elif search_for_gs:
-        '''
+        
         v_chis = np.arange(1000,10000,100)
         v_phis = np.arange(1000,10000,100)
         v_sigmas = np.arange(10000,100000,1000)
@@ -326,7 +329,7 @@ if __name__ == "__main__":
         c7 = 10*X_z3prim <= X_z12
         print(c1)
         #cond = c1+c2+c3+c4+c5+c6+c7
-        '''
+        
         v_chis = np.arange(1000,10000,10)
         m_Z3s = np.arange(1000,10000,10)
         model_list = []
@@ -399,7 +402,7 @@ if __name__ == "__main__":
     
     #ys = res.x
     #print(ys)
-'''
+
     print(f"ys:{ys}")
     yukawas = build_yukawa(ys, M_Ds, vs)
     
@@ -430,4 +433,4 @@ if __name__ == "__main__":
     #TODO: Calculate further constants, use in minimization?
     c_sd = (mass_Q_d_L[0,1]**2)/Delta2[1]# + mass_Q_d_R[0,1]**2 + 2*mass_Q_d_L[0,1]*mass_Q_d_R[0,1]
     print(f"The constant for a kaon-antikaon with neutral current is: {c_sd}")
-'''   
+'''

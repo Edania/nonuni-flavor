@@ -68,6 +68,7 @@ def compare_Qs(field, basis, basis_SM):
 
 def solve_for_gs(gs, mzs, g, g_prim, vs):
     M_b = build_M_b(g,gs,vs) 
+    #TODO Check that V is properly normalized
     Delta2, V = fs.gauge_boson_basis(M_b) 
     V[np.abs(V) < 0.01] = 0
     mass_comps = np.sqrt(Delta2[1:]) - mzs
@@ -99,15 +100,6 @@ def build_yukawa(ys, ms, vs):
     return yukawas
 
 # function for finding yukawa mass basis via minimize()
-def minimize_yukawas(ys, ms,Ms, vs):
-   
-    yukawas = build_yukawa(ys, [Ms[0],Ms[1],Ms[2]],vs)
-
-    U_L, diag_yukawa, Uh_R = fs.diag_yukawa(yukawas)
-    #diag_yukawa = diag_yukawa[::-1]
-
-    return np.sum((diag_yukawa[:3]- ms)**2)
-
 # builds the Q for this model, given a basis, eg Z^3, Z^3'...
 def build_Q(field_type, basis):
     base_charge = np.array([fs.find_charge("fermions", field_type, "I3"), fs.find_charge("fermions", field_type, "Y"), 
@@ -128,48 +120,6 @@ def sm_Q(field_type, basis):
     charges = basis*base_charge
     Q = np.diag([1,1,1])*np.sum(charges)
     return Q
-## OBSOLETE ##
-def minimize_for_field(gs,ys, field, vs, Ms, ms, mzs, g, g_prim, V, Delta2):
-    #gs = thetas[:4]
-    #ys = thetas[4:]
-  
-    yukawas = build_yukawa(ys, Ms, vs)
-    
-    U_L, diag_yukawa, Uh_R = fs.diag_yukawa(yukawas)
-    
-    base = V[:,1]
-    base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
-    
-    sm_Q_d_L = sm_Q(f"{field}_L", base_SM)
-    sm_Q_d_R = sm_Q(f"{field}_R", base_SM)
-
-    Q_d_L = np.abs(np.diag(build_Q(f"{field}_L", base)))
-    Q_d_R = np.abs(np.diag(build_Q(f"{field}_R", base)))
-
-    mass_Q_d_L = np.abs(fs.mass_Q(U_L, Q_d_L))
-    mass_Q_d_R = np.abs(fs.mass_Q(np.transpose(Uh_R), Q_d_R))
-    
-    min_QZ = np.sum((sm_Q_d_L-mass_Q_d_L[:3])**2 + (sm_Q_d_R-mass_Q_d_R[:3])**2)
-    
-    base = V[:,0]
-    base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
-    
-    sm_Q_d_L = sm_Q(f"{field}_L", base_SM)
-    sm_Q_d_R = sm_Q(f"{field}_R", base_SM)
-
-    Q_d_L = np.abs(np.diag(build_Q(f"{field}_L", base)))
-    Q_d_R = np.abs(np.diag(build_Q(f"{field}_R", base)))
-
-    mass_Q_d_L = np.abs(fs.mass_Q(U_L, Q_d_L))
-    mass_Q_d_R = np.abs(fs.mass_Q(np.transpose(Uh_R), Q_d_R))
-    
-    min_Qgamma = np.sum((sm_Q_d_L-mass_Q_d_L[:3])**2 + (sm_Q_d_R-mass_Q_d_R[:3])**2)
-    
-    #min_Z = (np.sqrt(Delta2[1]) - mzs[0])**2
-    min_Y = np.sum((diag_yukawa[:3]- ms)**2) + np.sum((diag_yukawa[3:]-Ms)**2)
-    #print(f"min_Z = {min_Z}, min_Y = {min_Y}, min_Q = {min_Q}")
-    return min_Y + min_QZ + min_Qgamma, U_L, diag_yukawa, Uh_R
-    #c_sd = (mass_Q_d_L[0,1]**2)/Delta2[1]# + mass_Q_d_R[0,1]**2 + 2*mass_Q_d_L[0,1]*mass_Q_d_R[0,1]
 
 def Q_compare(field, base, base_SM, U_L, Uh_R):
     sm_Q_d_L = np.diag(sm_Q(f"{field}_L", base_SM))
@@ -200,8 +150,8 @@ def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, g, g_prim, V, M_Us, m_us, M_Ds, m_ds, 
     yukawas_u = build_yukawa(np.insert(ys_u, 0, y3_u), M_Us, v_us)
     yukawas_d = build_yukawa(np.insert(ys_d, 0, y3_d), M_Ds, v_ds)
 
-    U_u_L, diag_yukawa_u, Uh_u_R = fs.diag_yukawa(yukawas_u)
-    U_d_L, diag_yukawa_d, Uh_d_R = fs.diag_yukawa(yukawas_d)
+    Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
+    Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
 
     #m_u_compare = np.concatenate((diag_yukawa_u[:3] - m_us,diag_yukawa_u[3:] - M_Us))
     #m_d_compare = np.concatenate((diag_yukawa_d[:3] - m_ds,diag_yukawa_d[3:] - M_Ds))
@@ -236,58 +186,6 @@ def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, g, g_prim, V, M_Us, m_us, M_Ds, m_ds, 
 def wrapper_solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, g, g_prim, V, M_Us, m_us, M_Ds, m_ds, mzs):
     compares = solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, g, g_prim, V, M_Us, m_us, M_Ds, m_ds, mzs)
     return np.sum(compares**2)
-
-def LCB(mean, var, beta):
-    std_dev = np.sqrt(var)
-    return -mean + beta * std_dev
-
-def global_min_GP(model, train_points, beta,vs, g, g_prim, M_Us, m_us, M_Ds, m_ds, mzs, tol = 1e-3, max_iters = 100):
-    # Bayesian opt.
-    sampled_points = []
-    sampled_minim = []
-    iter = 0
-    diff = 1
-    previous_point = np.ones_like(train_points[0,:])
-    while diff > tol:
-        print(f"On iteration {iter}")
-        test_points = np.random.uniform(0,2,np.shape(train_points))
-        for point in range(train_points.shape[0]):
-            res = minimize(minimize_for_CKM, test_points[point,:],args=(vs, g, g_prim, M_Us,m_us, M_Ds, m_ds, mzs),bounds= ((0,2),(0,2),(0,2),(0,2),(0,1000),(0,1000),(0,1000),(0,1000),
-                                                                                    (0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),
-                                                                                        (0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000),(0,1000)))
-            test_points[point,:] = res.x
-        #for i in range(train_points):
-        #    train_minima[i] = minimize_for_CKM(train_thetas[i],vs, g, g_prim, M_Us, m_us, M_Ds, m_ds, mzs)
-
-        # Predict over the grid
-        mean, var = model.predict(test_points)
-
-        # Compute the acquisition function on grid.
-        acquisition_values = LCB(mean, var, beta)
-        
-        # Select point with maximum acquisition value
-        new_point_idx = np.argmax(acquisition_values)
-        new_point = test_points[new_point_idx, :]
-        diff = np.sqrt(np.sum((previous_point-new_point)**2))
-        
-        sampled_points.append(new_point)
-    
-        # Compute E at new point
-        new_minim = minimize_for_CKM(new_point,vs, g, g_prim, M_Us, m_us, M_Ds, m_ds, mzs)
-
-        sampled_minim.append(new_minim)
-    
-        # Update X,E and retrain model
-        model.set_XY(np.vstack([model.X, new_point]), np.vstack([model.Y, new_minim]))
-        model.optimize()
-
-        iter += 1
-        if iter == max_iters:
-            break
-        
-        previous_point = new_point
-
-    return iter, np.array(sampled_points), np.array(sampled_minim)
 
 def get_g_models(filename, g, g_prim, search_for_gs = False):
     if search_for_gs:
@@ -356,10 +254,10 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
         m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
         m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
         successes = 0
-        for g_idx, g_model in tqdm(enumerate(g_model_list)):
+        for g_idx, g_model in enumerate(tqdm(g_model_list)):
             if verbose:
                 print(f"On g model: {g_idx}")
-            print(f"Successes: {successes}")
+            print(f"\nSuccesses: {successes}")
             gs = g_model[2,:]
             mzs = g_model[0,:]
             vs = g_model[1,:]
@@ -380,6 +278,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                 M_Us = np.array([M_23, M_23, M_12])
 
                 v_us, v_ds = calc_vs(tan_beta, vs)
+                # Is this necessary?
                 y3_u = np.sqrt(2)*conts.m_t/v_us[0]
                 y3_d = np.sqrt(2)*conts.m_b/v_ds[0]
 
@@ -396,6 +295,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                 ys = res.x
                 # print(res.cost)
                 if res.cost < cost_tol and all(np.abs(ys) > 0.01):
+                    #print(res.cost)
                     successes += 1
                     
                     y_ds = np.insert(ys[12:],0,y3_d) 
@@ -403,8 +303,8 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                     yukawas_u = build_yukawa(y_us, M_Us, v_us)
                     yukawas_d = build_yukawa(y_ds, M_Ds, v_ds)
 
-                    U_u_L, diag_yukawa_u, Uh_u_R = fs.diag_yukawa(yukawas_u)
-                    U_d_L, diag_yukawa_d, Uh_d_R = fs.diag_yukawa(yukawas_d)
+                    Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
+                    Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
 
                     real_M_Us = diag_yukawa_u[3:]
                     real_M_Ds = diag_yukawa_d[3:]
@@ -484,8 +384,8 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
             yukawas_u = build_yukawa(y_us, M_Us, v_us)
             yukawas_d = build_yukawa(y_ds, M_Ds, v_ds)
 
-            U_u_L, diag_yukawa_u, Uh_u_R = fs.diag_yukawa(yukawas_u)
-            U_d_L, diag_yukawa_d, Uh_d_R = fs.diag_yukawa(yukawas_d)
+            Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
+            Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
             print(f"mds diffs: {diag_yukawa_d[:3]-m_ds}")
             print(f"mus diffs: {diag_yukawa_u[:3]-m_us}")
         
@@ -540,9 +440,9 @@ if __name__ == "__main__":
     y_plotting = True
     g_model_list = get_g_models("correct_g_models.npz", g, g_prim, search_for_gs)
 
-    #y_filename = "correct_y_models_again_again.npz"
-    y_filename = "valid_y_models.npz"
-    y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.5, max_iters=10, m_repeats=30)
+    y_filename = "extra_correct_y_models.npz"
+    #y_filename = "valid_y_models.npz"
+    y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=10, m_repeats=50, verbose=False)
 
     #y_model_list = refine_y_models("correct_refined_y_models_again.npz", y_model_list, g_model_list, cost_tol=0.2, max_iters=1000)
 
@@ -604,25 +504,29 @@ if __name__ == "__main__":
         fig, axs = plt.subplots(1,2, figsize = (7,5))
         axs[0].scatter(v_chi_list, v_phi_list, s = 2, label = "data")
         axs[0].plot(v_chi_list, v_chi_list*v_res.slope + v_res.intercept, "r", label = f"slope = {v_res.slope:.3f}")
+        axs[0].plot(v_chi_list, v_chi_list*1.5, label = r"$\times 1.5$ limit")
+        axs[0].plot(v_chi_list, v_chi_list*5, label = r"$\times 5$ limit")
         axs[0].set_title("Correlation between $v_\chi$ and $v_\phi$")
         axs[0].set_xlabel("$v_\chi$ [TeV]")
         axs[0].set_ylabel("$v_\phi$ [TeV]")
         axs[0].legend()
         axs[1].scatter(m_Z3_list, m_Z3prim_list, s = 2, label = "data")
         axs[1].plot(m_Z3_list, m_Z3_list*m_res.slope + m_res.intercept, "r", label = f"slope = {m_res.slope:.3f}")
+        axs[1].plot(m_Z3_list, m_Z3_list*1.5, label = r"$\times 1.5$ limit")
+        axs[1].plot(m_Z3_list, m_Z3_list*5, label = r"$\times 5$ limit")
         axs[1].set_title("Correlation between $m_{Z_3}$ and $m_{Z'_3}$")
         axs[1].set_xlabel("$m_{Z_3}$ [TeV]")
         axs[1].set_ylabel("$m_{Z'_3}$ [TeV]")
         axs[1].legend()
         plt.tight_layout()
-        plt.savefig("v_m_ratios.png")
+        plt.savefig("figs/v_m_ratios.png")
         # Save every g regression
         #g1_list = [model[2,2] for model in g_model_list]        
         
     if y_plotting:
-        scatter_index = False
+        scatter_index = True
         scatter_tan_beta = False
-        scatter_m_v_ratio = True
+        scatter_m_v_ratio = False
         valid_model_check = True
 
         if scatter_index:
@@ -656,9 +560,8 @@ if __name__ == "__main__":
             y_us = y_model[0]
             yukawas_u = build_yukawa(y_us, y_model[2], v_us)
             yukawas_d = build_yukawa(y_ds, y_model[2], v_ds)
-
-            U_u_L, diag_yukawa_u, Uh_u_R = fs.diag_yukawa(yukawas_u)
-            U_d_L, diag_yukawa_d, Uh_d_R = fs.diag_yukawa(yukawas_d)
+            Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
+            Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
 
             real_M_Us = diag_yukawa_u[3:]
             real_M_Ds = diag_yukawa_d[3:]
@@ -679,15 +582,17 @@ if __name__ == "__main__":
                 Q_u_R = build_Q("u_R", base)
 
                 mass_Q_d_L = fs.mass_Q(U_d_L, Q_d_L)
-                mass_Q_d_R = fs.mass_Q(np.transpose(Uh_d_R), Q_d_R)
+                mass_Q_d_RL = fs.mass_Q(U_d_L, Q_d_R, np.transpose(Uh_d_R))
+                mass_Q_d_LR = fs.mass_Q(np.transpose(Uh_d_R), Q_d_L,U_d_L)
 
                 mass_Q_u_L = fs.mass_Q(U_u_L, Q_u_L)
-                mass_Q_u_R = fs.mass_Q(np.transpose(Uh_u_R), Q_u_R)
+                mass_Q_u_LR = fs.mass_Q(U_u_L, Q_u_R, np.transpose(Uh_u_R))
+                mass_Q_u_RL = fs.mass_Q(np.transpose(Uh_u_R), Q_u_L,U_u_L)
                 #print(mass_Q_d_L)
                 # Same order as in table
-                cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_d_L[0,1]*mass_Q_d_R[0,1], mass_Q_u_L[0,1]**2, 
-                               mass_Q_u_L[0,1]*mass_Q_u_R[0,1], mass_Q_d_L[0,2]**2, mass_Q_d_L[0,2]*mass_Q_d_R[0,2],
-                               mass_Q_d_L[1,2]**2, mass_Q_d_L[1,2]*mass_Q_d_R[1,2]])
+                cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_d_LR[0,1]*mass_Q_d_RL[0,1], mass_Q_u_L[0,1]**2, 
+                               mass_Q_u_LR[0,1]*mass_Q_u_RL[0,1], mass_Q_d_L[0,2]**2, mass_Q_d_LR[0,2]*mass_Q_d_RL[0,2],
+                               mass_Q_d_L[1,2]**2, mass_Q_d_LR[1,2]*mass_Q_d_RL[1,2]])
                 #Absolute value ok?
                 cs = np.abs(cs)/(Delta2[k]/(1000**2))
                 Lambda_eff = np.sqrt(1/cs)
@@ -699,9 +604,11 @@ if __name__ == "__main__":
             tot_L_diffs = tot_L_diffs[finite_idx]
             #print(tot_L_diffs)
             if (tot_L_diffs > 0).all():
-                #print("Found valid model")
+                print("Found valid model")
                 if valid_model_check:
-                    print(y_model)
+                    g_model = g_model_list[y_model[4]]
+                    print(f"y_model: {y_model}")
+                    print(f"g_model: {g_model}")
                     print(f"M_Us: {real_M_Us}")
                     print(f"M_Ds: {real_M_Ds}")
                 valid_model_list.extend(y_model)
@@ -738,7 +645,7 @@ if __name__ == "__main__":
                 elif scatter_m_v_ratio:
                     #v_arr = np.array([g_model_list[g_idx][1,1] for g_idx in g_idx_list])
                     
-                    v_arr = np.sqrt(conts.v_H**2/(1+tan_beta_arr**2))
+                    v_arr = tan_beta*np.sqrt(conts.v_H**2/(1+tan_beta_arr**2))
                     #v_arr = np.array(g_model_list[g_idx_list][1,1])
                     M23_arr = np.array([model[2][0] for model in y_model_list])
                     #x_array = np.array(m_u_list)/v_arr

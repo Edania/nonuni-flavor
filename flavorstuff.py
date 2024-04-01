@@ -135,8 +135,12 @@ def diag_yukawa(Y):
     return U,Delta,Vh
 
 # Method for finding the mass basis for Q given left- or right-rotating unitary matrix
-def mass_Q(V, Q):
-    return np.matmul(np.matmul(V.conj().T,Q),V)
+def mass_Q(V, Q, U=None):
+    if type(U) == np.array:
+        res = np.matmul(np.matmul(V.conj().T,Q),U)
+    else:
+        res = np.matmul(np.matmul(V.conj().T,Q),V)
+    return res
 
 # Finds specified charge from charges.json
 def find_charge(type_, field, charge):
