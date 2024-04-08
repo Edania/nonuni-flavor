@@ -28,8 +28,10 @@ class constants:
         self.v_H = s*246
         self.m_u = s*2.3*10**(-3)
         self.m_d = s*4.8*10**(-3)
+        
         self.m_c = s*1.275
         self.m_s = s*0.095
+        
         self.m_t = s*173.21
         self.m_b = s*4.18
 

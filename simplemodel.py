@@ -13,25 +13,6 @@ from scipy.optimize import minimize, fsolve, least_squares, curve_fit
 from scipy.stats import linregress
 conts = fs.constants()
 
-# Initiates constants for this particular model
-def init_constants(unit = "GeV"):
-    valid_units = {"GeV":1000, "TeV":1}
-    try:
-        s = valid_units[unit]
-    except KeyError as e:
-        print(f"Invalid key {unit}")
-        exit(1)
-
-    m_U = s*1
-    m_D = s*1
-    m_E = s*1
-
-    v_chi = s*1
-    v_phi = s*1
-    v_sigma = s*10
-
-    return m_U, m_D, m_E, v_chi, v_phi, v_sigma
-
 def get_lambda_limits():
     #real_Lambda_effs = np.array([980, 18000, 1200, 6200, 510, 1900, 110, 370]) # TeV
     real_Lambda_effs = np.array([980, 1200, 510, 110]) # TeV
@@ -46,48 +27,35 @@ def build_M_b(g,gs,vs):
 
     return M_b 
 
+def get_delta2_V(g, gs, vs):
+    [g1, g2, g3, g4] = gs.flatten()
+    [vH, vchi, vphi, vsigma] = vs.flatten()
+    M2 = ([[g**2*vH**2/8, -g*g1*vH**2/8, 0, 0, 0], 
+            [-g*g1*vH**2/8, g1**2*vH**2/8 + 5*g1**2*vchi**2/36 + g1**2*vphi**2/8, -5*g1*g2*vchi**2/18, -g1*g3*vphi**2/8, 0], 
+            [0, -5*g1*g2*vchi**2/18, 5*g2**2*vchi**2/9, 0, 0], 
+            [0, -g1*g3*vphi**2/8, 0, g3**2*vphi**2/8 + g3**2*vsigma**2/8, -g3*g4*vsigma**2/8], 
+            [0, 0, 0, -g3*g4*vsigma**2/8, g4**2*vsigma**2/8]])
+    (Delta2, V) = np.linalg.eigh(M2)
+    return Delta2, V
+
 # Function for minimize() that finds the gs that give the Z-boson mass
 # There should be an exact analytical solution to this.
 def closest_Z_mass(gs, mzs,g, vs):
     M_b = build_M_b(g,gs,vs)
     Delta2, V = fs.gauge_boson_basis(M_b) 
     return np.sqrt(Delta2[1:]) - mzs
-    #return (np.sqrt(Delta2[1]) - mzs[0])**2 + np.sum(np.sqrt(Delta2[2:]) - mzs[1:])**2 + np.sqrt(np.abs(Delta2[0])) #np.abs(np.sqrt(Delta2[1]) - conts.m_Z)
 
+# Returns the basis for the Z-coupling in the standard model, with [I_L3, Q]
 def get_base_Z(g,g_prim):
     return np.sqrt(g**2 + g_prim**2)*np.array([1, -conts.sw2])
-    
+
+# Returns the basis for the gamma-coupling in the standard model, with [I_L3, Q]
 def get_base_gamma():
     return np.array([0, conts.e_em])
-
-def compare_Qs(field, basis, basis_SM):
-    Q = np.diag(build_Q(field, basis))
-    Q_sm = np.diag(sm_Q(field, basis_SM))
-    #print(Q[:3])
-    #print(Q_sm)
-    return np.abs(Q[:3]) - np.abs(Q_sm)
-
-def solve_for_gs(gs, mzs, g, g_prim, vs):
-    M_b = build_M_b(g,gs,vs) 
-    #TODO Check that V is properly normalized
-    Delta2, V = fs.gauge_boson_basis(M_b) 
-    V[np.abs(V) < 0.01] = 0
-    mass_comps = np.sqrt(Delta2[1:]) - mzs
-    #print(mass_comps)
-    basis_Z = get_base_Z(g,g_prim)
-    basis_gamma = get_base_gamma()
-    Q_comps = [compare_Qs("d_L", V[:,0], basis_gamma), compare_Qs("d_R", V[:,0],basis_gamma),compare_Qs("u_L", V[:,0],basis_gamma),compare_Qs("u_R", V[:,0],basis_gamma),
-               compare_Qs("d_L", V[:,1], basis_Z),compare_Qs("d_R", V[:,1], basis_Z),compare_Qs("u_L", V[:,1], basis_Z),compare_Qs("u_R", V[:,1], basis_Z)] 
-    comps = np.vstack(Q_comps).flatten()
-    comps = np.concatenate((comps.flatten(), mass_comps))
-    comps = comps.flatten()
-    comps = mass_comps
-    return comps    
-
     
-# Builds the yukawa matrix as specified in the article
+# Builds the yukawa matrix as specified in the article. 
+# VEVs are treated unnormalized prior to this
 def build_yukawa(ys, ms, vs, alt = False):
-    # Normalization
     vs = vs/np.sqrt(2)
     [v, v_chi, v_phi, v_sigma] = vs.flatten()
     m = np.zeros((3,3))
@@ -102,20 +70,35 @@ def build_yukawa(ys, ms, vs, alt = False):
     yukawas = np.vstack((np.hstack((m, Delta_L)), np.hstack((Delta_R, M))))
     return yukawas
 
-# function for finding yukawa mass basis via minimize()
-# builds the Q for this model, given a basis, eg Z^3, Z^3'...
-def build_Q(field_type, basis):
+def build_base_charge(field_type):
     base_charge = np.array([fs.find_charge("fermions", field_type, "I3"), fs.find_charge("fermions", field_type, "Y"), 
                    (fs.find_charge("fermions", field_type, "B") - fs.find_charge("fermions", field_type, "L"))/2,
                    fs.find_charge("fermions", field_type, "I3_R"), fs.find_charge("fermions", field_type, "I3_R")])
-    charges = basis*base_charge
-    #print(f"charges: {charges}")
-    # First three regular fermoins, last three new vector-like fermions. 
-    Q_arr = charges[0] + np.array([charges[2] + charges[3], charges[2] + charges[4], charges[1], 
-                                charges[2] + charges[3], charges[2] + charges[4], charges[1]])
-    #print(f"Q_arr: {Q_arr}")
+    return base_charge
+
+
+# function for finding yukawa mass basis via minimize()
+# builds the Q for this model, given a basis, eg Z^3, Z^3'...
+def build_Q(field, basis):
+    
+    
+    if field[0] == "u":
+        heavy = "U"
+    else:
+        heavy = "D"
+    
+    base_charge_light = build_base_charge(field)
+    charges = basis*base_charge_light
+    Q_arr_light = charges[0] + np.array([charges[2] + charges[3], charges[2] + charges[4], charges[1]])
+
+    base_charge_alpha = build_base_charge(heavy+"_alpha")    
+    charges_alpha = basis*base_charge_alpha
+    base_charge_3 = build_base_charge(heavy+"_3")    
+    charges_3 = basis*base_charge_3
+    Q_arr_heavy = np.array([charges_alpha[1] + charges_alpha[2], charges_alpha[1] + charges_alpha[2], charges_3[2] + charges_3[3]])
+    Q_arr = np.concatenate((Q_arr_light, Q_arr_heavy))
+    # TODO: Correct heavy particles 
     Q = np.diag(Q_arr)
-    #print(f"{field_type}: {Q}")
     return Q
 
 def sm_Q(field_type, basis):
@@ -134,9 +117,6 @@ def Q_compare(field, base, base_SM, U_L, Uh_R):
     mass_Q_d_L = np.abs(fs.mass_Q(U_L, Q_d_L))
     mass_Q_d_R = np.abs(fs.mass_Q(np.transpose(Uh_R), Q_d_R))
     compare_Q = np.append(np.diag(mass_Q_d_L)[:3]-np.abs(sm_Q_d_L),np.diag(mass_Q_d_R)[:3]-np.abs(sm_Q_d_R))
-    #compare_Q = np.append(compare_Q, mass_Q_d_L[0,1])
-    #compare_Q = np.append(compare_Q, mass_Q_d_L[0,2])
-    #compare_Q = np.append(compare_Q, mass_Q_d_L[1,2])
     return compare_Q
 
 
@@ -186,7 +166,7 @@ def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
     #compares = np.concatenate((CKM_compare, m_u_compare, m_d_compare))
     return compares
 
-def alt_solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
+def alt_solve_for_ys(ys,g,g_prim,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
     
     ys_u = ys[:13]
     ys_d = ys[13:]
@@ -200,19 +180,18 @@ def alt_solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
     m_u_compare = diag_yukawa_u[:3] - m_us
     m_d_compare = diag_yukawa_d[:3] - m_ds
     
-    base_SM_Z = np.array([1, -conts.sw2])
-    base_SM_gamma = np.array([0, conts.e_em])
+    base_SM_Z = get_base_Z(g,g_prim)
+    base_SM_gamma = get_base_gamma()
     compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
                                  Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
     
     V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
     CKM_compare = (np.abs(V_CKM_calc[:3,:3])-np.abs(conts.V_CKM)).flatten()
-    
     compares = np.concatenate((CKM_compare, compare_Qs, m_u_compare, m_d_compare))
 
     return compares
 
-def get_g_models(filename, g, g_prim, search_for_gs = False):
+def get_g_models(filename, g, search_for_gs = False):
     if search_for_gs:
         v_chis = np.arange(1000,10000,10)
         m_Z3s = np.arange(1000,10000,10)
@@ -231,30 +210,17 @@ def get_g_models(filename, g, g_prim, search_for_gs = False):
                 gs = np.random.uniform(0.01,2,4)
                 vs = np.array([conts.v_H, v_chi, v_phi, v_sigma])
                 mzs = np.array([conts.m_Z, m_Z3, m_Z3prim, m_Z12])
-                #res = gs_eq_system(*vs, *mzs)
-                #res = least_squares(solve_for_gs, gs, args=(mzs, g, g_prim, vs), bounds=(0.01,2), max_nfev=1000)
-                #gs, infodict,ier,mesg = fsolve(solve_for_gs, gs,args=(mzs, g, g_prim, vs), full_output=True, factor = 0.1)
-                #diff = infodict["fvec"]
-                res = least_squares(solve_for_gs, gs, args=(mzs, g, g_prim, vs), bounds=(0.01,2), max_nfev=100,
-                                    loss = "soft_l1", method= "trf", jac = "2-point", tr_solver="exact")
-            #
-                diff = res.cost
-                #print(diff)
-                if all(gs <= 2)  and all(gs > 0.01) and np.abs(diff) < 1000:
+                gs, infodict,ier,mesg = fsolve(closest_Z_mass, gs,args=(mzs, g, vs), full_output=True, factor = 0.1)
+                diff = infodict["fvec"]
+                
+                if all(gs <= 2)  and all(gs > 0.01) and np.abs(diff) < 1e-5:
                     tmp_list = [mzs, vs, gs]
-                    #tmp_dict = {"mzs":list(mzs), "vs":list(vs), "gs":list(gs)}
                     model_list.append(tmp_list)
                     print(f"Successful model")
                     print(f"gs: {gs}")
                     print(f"vs : {vs}")
                     print(f"mzs: {mzs}")
-                    print(f"Diff m_Zs = {diff}")
-                    M_b = build_M_b(g,gs,vs)
-                    Delta2, V = fs.gauge_boson_basis(M_b) 
-                    V[np.abs(V) < 0.01] = 0
-                    #print(np.sqrt(Delta2))
-                    print(build_Q("d_L", V[:,1]))
-                    
+                    print(f"Diff m_Zs = {diff}")                    
         if model_list:
             np.savez(filename, *model_list)
     
@@ -264,13 +230,10 @@ def get_g_models(filename, g, g_prim, search_for_gs = False):
 
     return model_list
 
-def calc_vs(tan_beta, vs):
-    v_us = vs
-    v_ds = vs
-
-    v_ds[0]= np.sqrt(vs[0]**2/(1+tan_beta**2))
-    v_us[0] = tan_beta*v_ds[0]
-    return v_us, v_ds
+def calc_vs(tan_beta, v_H):
+    v_d= np.sqrt(v_H**2/(1+tan_beta**2))
+    v_u = tan_beta*v_d
+    return v_u, v_d
 
 def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol = 0.5, m_repeats = 20, max_iters = 100, verbose = True, alt = True):
     if search_for_ys:
@@ -280,31 +243,29 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
         m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
         successes = 0
         M_23s = np.linspace(1000,10000, m_repeats)
-        M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
-        for g_idx, g_model in enumerate(tqdm(g_model_list)):
-            if verbose:
-                print(f"On g model: {g_idx}")
-            print(f"\nSuccesses: {successes}")
-            gs = g_model[2,:]
-            mzs = g_model[0,:]
-            vs = g_model[1,:]
-            #print(f"On g_model {g_idx}")
-            M_b = build_M_b(g,gs,vs)
+        #M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
 
-            Delta2, V = fs.gauge_boson_basis(M_b)    
-            # Cuts off non-significant contributions, for a cleaner model
-            V[np.abs(V) < 0.01] = 0 
+        for g_idx, g_model in enumerate(tqdm(g_model_list)):
+            print(f"\nSuccesses: {successes}")
+            vs = g_model[1,:]
+            gs = g_model[2,:]
+            #M_b = build_M_b(g,gs,vs)
+
+            #Delta2, V = fs.gauge_boson_basis(M_b)    
+            Delta2, V = get_delta2_V(g, gs, vs)
+            #V[np.abs(V) < 0.01] = 0 
             valid_idxs = np.argwhere(M_23s > vs[1]).flatten()
-          #  print(valid_idxs)
             for idx in valid_idxs:
                 M_23 = M_23s[idx]
-                M_12 = M_12s[idx]
+                M_12 = 10*M_23 + np.random.randint(1,100)
                 tan_beta = np.random.randint(10,100)
                 #M_23 = np.random.randint(1000,10000)
                 
                 M_Us = np.array([M_23, M_23, M_12])
 
-                v_us, v_ds = calc_vs(tan_beta, vs)
+                v_u, v_d = calc_vs(tan_beta, conts.v_H)
+                v_us = np.array([v_u, vs[1], vs[2], vs[3]])
+                v_ds = np.array([v_d, vs[1], vs[2], vs[3]])
                 # Is this necessary?
                 if alt:
                     y3_u = np.sqrt(2)*conts.m_t/v_us[0]
@@ -316,15 +277,11 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
 
                     ys = np.random.uniform(0.01,2,24)
                 
-                neg_indices = np.random.random(len(ys)) > 0.8
+                neg_indices = np.random.random(len(ys)) > 0.5
                 np.negative(ys, where=neg_indices, out=ys)
-                #print(ys)
-                #ys = np.ones(24)*0.1
 
-#                res = least_squares(solve_for_ys, ys, args=(y3_u,y3_d,v_us,v_ds,g,g_prim,V,M_Us,m_us,M_Ds,m_ds,mzs), 
-#                                    loss = "soft_l1", method= "dogbox", bounds = (-2,2), max_nfev=max_iters)
                 if alt:
-                    res = least_squares(alt_solve_for_ys, ys, args=(y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
+                    res = least_squares(alt_solve_for_ys, ys, args=(g,g_prim,y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
                                 loss = "linear", method= "trf", jac = "2-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2,2)) #
                     
                 else:
@@ -333,7 +290,6 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                 ys = res.x
                 #print(res.cost)
                 if res.cost < cost_tol and all(np.abs(ys) > 0.01):
-                    #print(res.cost)
                     successes += 1
                     if alt:
                         y_ds = np.insert(ys[13:],0,y3_d) 
@@ -342,15 +298,35 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                     else:
                         y_ds = np.insert(ys[12:],0,y3_d) 
                         y_us = np.insert(ys[:12],0,y3_u)
-                    yukawas_u = build_yukawa(y_us, M_Us, v_us)
-                    yukawas_d = build_yukawa(y_ds, M_Us, v_ds)
-
-                    Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
-                    Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
-                    real_M_Us = diag_yukawa_u[3:]
-                    real_M_Ds = diag_yukawa_d[3:]
+       
                     tmp_list = [y_us, y_ds, M_Us, tan_beta, g_idx]
                     if verbose:
+                        yukawas_u = build_yukawa(y_us, M_Us, v_us)
+                        yukawas_d = build_yukawa(y_ds, M_Us, v_ds)
+
+                        Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
+                        Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
+                        real_M_Us = diag_yukawa_u[3:]
+                        real_M_Ds = diag_yukawa_d[3:]
+                        base = V[:,1]
+                        base_SM = np.array([1, -conts.sw2])
+                        # base_SM_gamma = np.array([0, conts.e_em])
+                        # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
+                        #base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
+                        sm_Q_d_L = np.diag(sm_Q("d_L", base_SM))
+                        sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
+
+                        Q_d_L = build_Q("d_L", base)
+                        Q_d_R = build_Q("d_R", base)
+
+                        #TODO: Compare diagonal charges with SM
+                        mass_Q_d_L = np.diag(fs.mass_Q(U_d_L, Q_d_L))
+                        mass_Q_d_R = np.diag(fs.mass_Q(np.transpose(Uh_d_R), Q_d_R))
+                        print(f"Charge difference L: {np.abs(mass_Q_d_L[:3]) - np.abs(sm_Q_d_L)}")
+                        print(f"Charge difference R: {np.abs(mass_Q_d_R[:3]) - np.abs(sm_Q_d_R)}")
+                        print(f"mds diffs: {diag_yukawa_d[:3]-m_ds}")
+                        print(f"mus diffs: {diag_yukawa_u[:3]-m_us}")
+                 
                         print("Successful model")
                         print(f"y_us: {y_us}\n y_ds: {y_ds}\n M_Us: {real_M_Us}\n M_Ds: {real_M_Ds}\n tan_beta = {tan_beta}\n g_idx = {g_idx}")
                     model_list.extend(tmp_list)
@@ -363,7 +339,92 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
     print(f"The number of y_models is: {len(model_list)}")
     return model_list
 
-def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_iters = 100, verbose = True):
+def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_iters = 100, verbose = True, alt = True):
+    model_list = []
+    tmp_list = []
+    m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
+    m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
+    successes = 0
+    #M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
+    for y_idx, y_model in enumerate(tqdm(y_model_list)):
+        if y_idx % 100 == 0:
+            print(f"\nSuccesses: {successes}")
+        [y_us, y_ds, M_Us, tan_beta, g_idx] = y_model
+        g_model = g_model_list[g_idx]
+        gs = g_model[2,:]
+        mzs = g_model[0,:]
+        vs = g_model[1,:]
+        v_us, v_ds = calc_vs(tan_beta, vs)
+
+        ys = np.concatenate((y_us[1:], y_ds[1:]))
+
+        y3_u = y_us[0]
+        y3_d = y_ds[0]
+        #M_b = build_M_b(g,gs,vs)
+
+        #Delta2, V = fs.gauge_boson_basis(M_b)    
+        Delta2, V = get_delta2_V(g, gs, vs)
+        #V[np.abs(V) < 0.01] = 0 
+        if alt:
+            res = least_squares(alt_solve_for_ys, ys, args=(g,g_prim,y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
+                        loss = "linear", method= "trf", jac = "3-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2,2)) #
+            
+        else:
+            res = least_squares(solve_for_ys, ys, args=(y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
+                        loss = "linear", method= "trf", jac = "3-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2,2)) #
+        ys = res.x
+       # print(res.cost)
+        if res.cost < cost_tol and all(np.abs(ys) > 0.01):
+            successes += 1
+            if alt:
+                y_ds = np.insert(ys[13:],0,y3_d) 
+                y_us = np.insert(ys[:13],0,y3_u)
+                
+            else:
+                y_ds = np.insert(ys[12:],0,y3_d) 
+                y_us = np.insert(ys[:12],0,y3_u)
+
+            tmp_list = [y_us, y_ds, M_Us, tan_beta, g_idx]
+            if verbose:
+                yukawas_u = build_yukawa(y_us, M_Us, v_us)
+                yukawas_d = build_yukawa(y_ds, M_Us, v_ds)
+
+                Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
+                Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
+                real_M_Us = diag_yukawa_u[3:]
+                real_M_Ds = diag_yukawa_d[3:]
+                base = V[:,1]
+                base_SM = np.array([1, -conts.sw2])
+                # base_SM_gamma = np.array([0, conts.e_em])
+                # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
+                #base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
+                sm_Q_d_L = np.diag(sm_Q("d_L", base_SM))
+                sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
+
+                Q_d_L = build_Q("d_L", base)
+                Q_d_R = build_Q("d_R", base)
+
+                #TODO: Compare diagonal charges with SM
+                mass_Q_d_L = np.diag(fs.mass_Q(U_d_L, Q_d_L))
+                mass_Q_d_R = np.diag(fs.mass_Q(np.transpose(Uh_d_R), Q_d_R))
+                print(f"Charge difference L: {np.abs(mass_Q_d_L[:3]) - np.abs(sm_Q_d_L)}")
+                print(f"Charge difference R: {np.abs(mass_Q_d_R[:3]) - np.abs(sm_Q_d_R)}")
+                print(f"mds diffs: {diag_yukawa_d[:3]-m_ds}")
+                print(f"mus diffs: {diag_yukawa_u[:3]-m_us}")
+            
+                print("Successful model")
+                print(f"y_us: {y_us}\n y_ds: {y_ds}\n M_Us: {real_M_Us}\n M_Ds: {real_M_Ds}\n tan_beta = {tan_beta}\n g_idx = {g_idx}")
+            model_list.extend(tmp_list)
+        if model_list:
+            np.savez(filename, *model_list)
+    
+    y_models = np.load(filename)
+    ex_model_list = [y_models[k] for k in y_models]
+    model_list = [[ex_model_list[i], ex_model_list[i+1],ex_model_list[i+2],ex_model_list[i+3],ex_model_list[i+4]] for i in np.arange(0,len(ex_model_list),5)]
+    print(f"The number of y_models is: {len(model_list)}")
+    return model_list
+
+def refine_y_models_old(filename, y_model_list, g_model_list, cost_tol = 0.5, max_iters = 100, verbose = True):
     model_list = []
     tmp_list = []
     m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
@@ -413,7 +474,7 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
                 Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
                 print(f"mds diffs: {diag_yukawa_d[:3]-m_ds}")
                 print(f"mus diffs: {diag_yukawa_u[:3]-m_us}")
-            
+
                 real_M_Us = diag_yukawa_u[3:]
                 real_M_Ds = diag_yukawa_d[3:]
                 base = V[:,1]
@@ -447,35 +508,26 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
     return model_list
 
 if __name__ == "__main__":
-
-    m_U, m_D, m_E, v_chi, v_phi, v_sigma = init_constants()
-    
     # According to definition
     g = conts.e_em/np.sqrt(conts.sw2)
     g_prim = conts.e_em/np.sqrt(1-conts.sw2)
-    #g = 0.652 
-    #g_prim = 0.357
     
     # Get models for gs
     search_for_gs = False
     search_for_ys = False
     g_plotting = False
     y_plotting = True
-    g_model_list = get_g_models("correct_g_models.npz", g, g_prim, search_for_gs)
+    g_model_list = get_g_models("correct_g_models.npz", g, search_for_gs)
 
-    y_filename = "y_models_corr_dof_26.npz"
+    y_filename = "y_models_corr_dof_26_1.npz"
     #y_filename = "valid_y_models.npz"
     #y_filename = "refined_ex_corr_y.npz"
     y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=50, verbose=False, alt = True)
 
-    #y_model_list = refine_y_models("refined_ex_corr_y.npz", y_model_list, g_model_list, cost_tol=0.3, max_iters=None, verbose=True)
-
-    #y_model = y_model_list[0]
-
+    y_model_list = refine_y_models("refined_y_dof_26_1.npz", y_model_list, g_model_list, cost_tol=0.3, max_iters=100, verbose=True)
+   
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
-
-    # FINALLY: Find the FCNC Wilson Coeffs
 
     if g_plotting:
         f  = open("saved_g_regrs.txt", "w")
@@ -495,21 +547,21 @@ if __name__ == "__main__":
             slope = res.slope
             intercept = res.intercept
             stderr = res.stderr
-            fig = plt.figure(figsize=(3.5,3))
+            fig = plt.figure(figsize=(3.5,4))
             plt.scatter(v_s, m_zs, s = 2, label = "Data pts", zorder = 1)
-            plt.plot(v_chi_lin, v_chi_lin*slope + intercept, "r", label = f"Regr, g = {slope:.3f}", zorder = 2)
+            plt.plot(v_chi_lin, v_chi_lin*slope + intercept, "r", label = f"gx + m, g = {slope:.3f}, m = {intercept:.3f}", zorder = 2)
             plt.fill_between(v_chi_lin, v_chi_lin*(slope - stderr) + intercept, v_chi_lin*(slope + stderr) + intercept, alpha = 0.5, color = "r",zorder=3)
             plt.title(r"Correlation between $v_" + v_strings[i-1] + r"$ and $m_{" + m_strings[i-1] + r"}$")
             plt.xlabel(r"$v_" + v_strings[i-1] + r"/\sqrt{2}$ [TeV]")
             plt.ylabel(r"$m_{" + m_strings[i-1] + r"}$ [TeV]")
-            plt.legend()
+            plt.legend(loc = "upper center", bbox_to_anchor = (0.5,-0.2))
             plt.tight_layout()
             plt.savefig(f"figs/v_m_{i}.png")
             f.write(f"g{i+1} : {slope}\n")
         f.close()
         
-        v_chi_list = np.array([model[1,1] for model in g_model_list])/1000
-        v_phi_list = np.array([model[1,2] for model in g_model_list])/1000
+        v_chi_list = np.array([model[1,1] for model in g_model_list])/1000/np.sqrt(2)
+        v_phi_list = np.array([model[1,2] for model in g_model_list])/1000/np.sqrt(2)
 
         m_Z3_list = np.array([model[0,1] for model in g_model_list])/1000
         m_Z3prim_list = np.array([model[0,2] for model in g_model_list])/1000
@@ -522,8 +574,8 @@ if __name__ == "__main__":
         axs[0].plot(v_chi_list, v_chi_list*1.5, label = r"$\times 1.5$ limit")
         axs[0].plot(v_chi_list, v_chi_list*5, label = r"$\times 5$ limit")
         axs[0].set_title("Correlation between $v_\chi$ and $v_\phi$")
-        axs[0].set_xlabel("$v_\chi$ [TeV]")
-        axs[0].set_ylabel("$v_\phi$ [TeV]")
+        axs[0].set_xlabel("$v_\chi/\sqrt{2}$ [TeV]")
+        axs[0].set_ylabel("$v_\phi/\sqrt{2}$ [TeV]")
         axs[0].legend()
         axs[1].scatter(m_Z3_list, m_Z3prim_list, s = 2, label = "data")
         axs[1].plot(m_Z3_list, m_Z3_list*m_res.slope + m_res.intercept, "r", label = f"slope = {m_res.slope:.3f}")
@@ -551,42 +603,45 @@ if __name__ == "__main__":
         elif scatter_m_v_ratio:
             lambda_filename = "Lambda_effs_m_v_ratio.png"
 
-        m_u_list = []
         tan_beta_list = []
         charge_diff_list = []
         Lambda_effs_list = [[],[],[],[]]
         valid_model_list = []
         g_idx_list = [int(model[4]) for model in y_model_list]
         cost_list = []
-        #y_model_list = [y_model_list[0]]
         real_Lambda_effs = get_lambda_limits()
+
         for y_model in y_model_list:
+            y_us = np.array(y_model[0])
+            y_ds = np.array(y_model[1])
+            M_Us = y_model[2]
             tan_beta= y_model[3]
             g_idx = y_model[4]
-            vs = g_model_list[g_idx][1]
-            gs = g_model_list[g_idx][2]
+            vs = g_model_list[g_idx][1,:]
+            gs = g_model_list[g_idx][2,:]
             M_b = build_M_b(g,gs,vs)        
             Delta2, V = fs.gauge_boson_basis(M_b)    
+
             # Cuts off non-significant contributions, for a cleaner model
             V[np.abs(V) < 0.01] = 0 
 
-            v_us, v_ds = calc_vs(tan_beta, vs)
-            y_ds = np.array(y_model[1])
-            y_us = np.array(y_model[0])
+            v_u, v_d = calc_vs(tan_beta, conts.v_H)
+            v_us = [v_u, vs[1], vs[2], vs[3]]
+            v_ds = [v_d, vs[1], vs[2], vs[3]]
             #print(len(y_us))
-            yukawas_u = build_yukawa(y_us, y_model[2], v_us, alt = True)
-            yukawas_d = build_yukawa(y_ds, y_model[2], v_ds, alt = True)
+            yukawas_u = build_yukawa(y_us, M_Us, v_us, alt = True)
+            yukawas_d = build_yukawa(y_ds, M_Us, v_ds, alt = True)
             Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
             Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
-            
+
             real_M_Us = diag_yukawa_u[3:]
             real_M_Ds = diag_yukawa_d[3:]
-            m_u_list.append(real_M_Us[0])
+
             tan_beta_list.append(int(tan_beta))
             m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
             m_us = np.array([conts.m_u, conts.m_c, conts.m_t])        
             
-            # print(diag_yukawa_u[:3] - m_us)
+            #print(diag_yukawa_u[:3] - m_us)
             
             base_SM = np.array([1, -conts.sw2])
             sm_Q_d_L = np.diag(sm_Q("d_L", base_SM))
@@ -594,7 +649,7 @@ if __name__ == "__main__":
             tot_L_diffs = []
             V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L)
             in_ys = np.concatenate((y_us[1:], y_ds[1:]))             
-            compares = alt_solve_for_ys(in_ys, y_us[0], y_ds[0], v_us, v_ds, V, y_model[2], m_us, m_ds)
+            compares = alt_solve_for_ys(in_ys, g, g_prim, y_us[0], y_ds[0], v_us, v_ds, V, y_model[2], m_us, m_ds)
             # print(compares)
             # print(compares**2)
             cost = np.sum(compares**2)
@@ -620,7 +675,6 @@ if __name__ == "__main__":
                 mass_Q_u_L = fs.mass_Q(U_u_L, Q_u_L)
                 mass_Q_u_LR = fs.mass_Q(U_u_L, Q_u_R, np.transpose(Uh_u_R))
                 mass_Q_u_RL = fs.mass_Q(np.transpose(Uh_u_R), Q_u_L,U_u_L)
-                #print(mass_Q_d_L)
                 # Same order as in table
                 # cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_d_LR[0,1]*mass_Q_d_RL[0,1], mass_Q_u_L[0,1]**2, 
                 #                mass_Q_u_LR[0,1]*mass_Q_u_RL[0,1], mass_Q_d_L[0,2]**2, mass_Q_d_LR[0,2]*mass_Q_d_RL[0,2],
@@ -636,7 +690,7 @@ if __name__ == "__main__":
             tot_L_diffs = np.array(tot_L_diffs)
             finite_idx = np.isfinite(tot_L_diffs)
             tot_L_diffs = tot_L_diffs[finite_idx]
-            #print(tot_L_diffs)
+      
             if (tot_L_diffs > 0).all():
                 if valid_model_check:
                     print("Found valid model")
