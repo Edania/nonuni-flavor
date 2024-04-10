@@ -352,10 +352,10 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
         [y_us, y_ds, M_Us, tan_beta, g_idx] = y_model
         g_model = g_model_list[g_idx]
         gs = g_model[2,:]
-        mzs = g_model[0,:]
         vs = g_model[1,:]
-        v_us, v_ds = calc_vs(tan_beta, vs)
-
+        v_u, v_d = calc_vs(tan_beta, conts.v_H)
+        v_us = np.array([v_u, vs[1], vs[2], vs[3]])
+        v_ds = np.array([v_d, vs[1], vs[2], vs[3]])
         ys = np.concatenate((y_us[1:], y_ds[1:]))
 
         y3_u = y_us[0]
@@ -394,7 +394,7 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
                 real_M_Us = diag_yukawa_u[3:]
                 real_M_Ds = diag_yukawa_d[3:]
                 base = V[:,1]
-                base_SM = np.array([1, -conts.sw2])
+                base_SM = get_base_Z()
                 # base_SM_gamma = np.array([0, conts.e_em])
                 # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
                 #base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
@@ -463,18 +463,21 @@ def refine_y_models_old(filename, y_model_list, g_model_list, cost_tol = 0.5, ma
         # print(np.min(np.abs(ys)) )
         if res.cost < cost_tol and all(np.abs(ys) > 0.01):
             successes += 1
-            y_ds = np.insert(ys[12:],0,y3_d) 
-            y_us = np.insert(ys[:12],0,y3_u)
+            if alt:
+                y_ds = np.insert(ys[13:],0,y3_d) 
+                y_us = np.insert(ys[:13],0,y3_u)
+                
+            else:
+                y_ds = np.insert(ys[12:],0,y3_d) 
+                y_us = np.insert(ys[:12],0,y3_u)
 
+            tmp_list = [y_us, y_ds, M_Us, tan_beta, g_idx]
             if verbose:
-                print("Successful model")
                 yukawas_u = build_yukawa(y_us, M_Us, v_us)
-                yukawas_d = build_yukawa(y_ds, M_Ds, v_ds)
+                yukawas_d = build_yukawa(y_ds, M_Us, v_ds)
+
                 Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
                 Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
-                print(f"mds diffs: {diag_yukawa_d[:3]-m_ds}")
-                print(f"mus diffs: {diag_yukawa_u[:3]-m_us}")
-
                 real_M_Us = diag_yukawa_u[3:]
                 real_M_Ds = diag_yukawa_d[3:]
                 base = V[:,1]
@@ -493,13 +496,14 @@ def refine_y_models_old(filename, y_model_list, g_model_list, cost_tol = 0.5, ma
                 mass_Q_d_R = np.diag(fs.mass_Q(np.transpose(Uh_d_R), Q_d_R))
                 print(f"Charge difference L: {np.abs(mass_Q_d_L[:3]) - np.abs(sm_Q_d_L)}")
                 print(f"Charge difference R: {np.abs(mass_Q_d_R[:3]) - np.abs(sm_Q_d_R)}")
+                print(f"mds diffs: {diag_yukawa_d[:3]-m_ds}")
+                print(f"mus diffs: {diag_yukawa_u[:3]-m_us}")
+            
+                print("Successful model")
                 print(f"y_us: {y_us}\n y_ds: {y_ds}\n M_Us: {real_M_Us}\n M_Ds: {real_M_Ds}\n tan_beta = {tan_beta}\n g_idx = {g_idx}")
-                #model_list["0"]["ys"]
-
-            tmp_list = [y_us, y_ds, M_Us, tan_beta, g_idx]
             model_list.extend(tmp_list)
-    if model_list:
-        np.savez(filename, *model_list)
+        if model_list:
+            np.savez(filename, *model_list)
     
     y_models = np.load(filename)
     ex_model_list = [y_models[k] for k in y_models]
@@ -519,12 +523,12 @@ if __name__ == "__main__":
     y_plotting = True
     g_model_list = get_g_models("correct_g_models.npz", g, search_for_gs)
 
-    y_filename = "y_models_corr_dof_26_1.npz"
+    #y_filename = "y_models_corr_dof_26_1.npz"
     #y_filename = "valid_y_models.npz"
-    #y_filename = "refined_ex_corr_y.npz"
+    y_filename = "refined_y_dof_26_1.npz"
     y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=50, verbose=False, alt = True)
 
-    y_model_list = refine_y_models("refined_y_dof_26_1.npz", y_model_list, g_model_list, cost_tol=0.3, max_iters=100, verbose=True)
+    #y_model_list = refine_y_models("refined_y_dof_26_1.npz", y_model_list, g_model_list, cost_tol=0.3, max_iters=100, verbose=True)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
@@ -594,7 +598,7 @@ if __name__ == "__main__":
         scatter_index = False
         scatter_tan_beta = False
         scatter_m_v_ratio = True
-        valid_model_check = False
+        valid_model_check = True
 
         if scatter_index:
             lambda_filename = "Lambda_effs_all.png"
@@ -619,11 +623,10 @@ if __name__ == "__main__":
             g_idx = y_model[4]
             vs = g_model_list[g_idx][1,:]
             gs = g_model_list[g_idx][2,:]
-            M_b = build_M_b(g,gs,vs)        
-            Delta2, V = fs.gauge_boson_basis(M_b)    
+            Delta2, V = get_delta2_V(g, gs, vs)   
 
             # Cuts off non-significant contributions, for a cleaner model
-            V[np.abs(V) < 0.01] = 0 
+            #V[np.abs(V) < 0.01] = 0 
 
             v_u, v_d = calc_vs(tan_beta, conts.v_H)
             v_us = [v_u, vs[1], vs[2], vs[3]]
@@ -643,7 +646,7 @@ if __name__ == "__main__":
             
             #print(diag_yukawa_u[:3] - m_us)
             
-            base_SM = np.array([1, -conts.sw2])
+            base_SM = get_base_Z(g,g_prim)
             sm_Q_d_L = np.diag(sm_Q("d_L", base_SM))
             sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
             tot_L_diffs = []
