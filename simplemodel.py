@@ -3,9 +3,6 @@
 #####################################################################################
 import flavorstuff as fs
 import numpy as np
-import GPy
-import sympy as sp
-import json
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
@@ -166,13 +163,13 @@ def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
     #compares = np.concatenate((CKM_compare, m_u_compare, m_d_compare))
     return compares
 
-def alt_solve_for_ys(ys,g,g_prim,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
+def alt_solve_for_ys(ys,g,g_prim,v_us,v_ds, V, M_Us, m_us, m_ds):
     
-    ys_u = ys[:13]
-    ys_d = ys[13:]
+    ys_u = ys[:14]
+    ys_d = ys[14:]
 
-    yukawas_u = build_yukawa(np.insert(ys_u, 0, y3_u), M_Us, v_us, alt = True)
-    yukawas_d = build_yukawa(np.insert(ys_d, 0, y3_d), M_Us, v_ds, alt = True)
+    yukawas_u = build_yukawa(ys_u, M_Us, v_us, alt = True)
+    yukawas_d = build_yukawa(ys_d, M_Us, v_ds, alt = True)
 
     Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
     Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
@@ -246,7 +243,8 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
         #M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
 
         for g_idx, g_model in enumerate(tqdm(g_model_list)):
-            print(f"\nSuccesses: {successes}")
+            if g_idx % 100 == 0:
+                print(f"\nSuccesses: {successes}")
             vs = g_model[1,:]
             gs = g_model[2,:]
             #M_b = build_M_b(g,gs,vs)
@@ -270,7 +268,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                 if alt:
                     y3_u = np.sqrt(2)*conts.m_t/v_us[0]
                     y3_d = np.sqrt(2)*conts.m_b/v_ds[0]
-                    ys = np.random.uniform(0.01,2,26)
+                    ys = np.random.uniform(0.01,2,28)
                 else:
                     y3_u = np.sqrt(2)*conts.m_t/v_us[0]
                     y3_d = np.sqrt(2)*conts.m_b/v_ds[0]
@@ -279,10 +277,11 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                 
                 neg_indices = np.random.random(len(ys)) > 0.5
                 np.negative(ys, where=neg_indices, out=ys)
-
+                ys[0] = y3_u
+                ys[14] = y3_d
                 if alt:
-                    res = least_squares(alt_solve_for_ys, ys, args=(g,g_prim,y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
-                                loss = "linear", method= "trf", jac = "2-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2,2)) #
+                    res = least_squares(alt_solve_for_ys, ys, args=(g,g_prim,v_us,v_ds,V,M_Us,m_us,m_ds), 
+                                loss = "linear", method= "trf", jac = "2-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2.5,2.5)) #
                     
                 else:
                     res = least_squares(solve_for_ys, ys, args=(y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
@@ -292,8 +291,8 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                 if res.cost < cost_tol and all(np.abs(ys) > 0.01):
                     successes += 1
                     if alt:
-                        y_ds = np.insert(ys[13:],0,y3_d) 
-                        y_us = np.insert(ys[:13],0,y3_u)
+                        y_ds = ys[14:]
+                        y_us = ys[:14]
                         
                     else:
                         y_ds = np.insert(ys[12:],0,y3_d) 
@@ -356,33 +355,32 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
         v_u, v_d = calc_vs(tan_beta, conts.v_H)
         v_us = np.array([v_u, vs[1], vs[2], vs[3]])
         v_ds = np.array([v_d, vs[1], vs[2], vs[3]])
-        ys = np.concatenate((y_us[1:], y_ds[1:]))
+        ys = np.concatenate((y_us, y_ds))
 
-        y3_u = y_us[0]
-        y3_d = y_ds[0]
         #M_b = build_M_b(g,gs,vs)
 
         #Delta2, V = fs.gauge_boson_basis(M_b)    
         Delta2, V = get_delta2_V(g, gs, vs)
         #V[np.abs(V) < 0.01] = 0 
         if alt:
-            res = least_squares(alt_solve_for_ys, ys, args=(g,g_prim,y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
-                        loss = "linear", method= "trf", jac = "3-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2,2)) #
+            res = least_squares(alt_solve_for_ys, ys, args=(g,g_prim,v_us,v_ds,V,M_Us,m_us,m_ds), 
+                        loss = "linear", method= "trf", jac = "3-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2.5,2.5)) #
             
         else:
-            res = least_squares(solve_for_ys, ys, args=(y3_u,y3_d,v_us,v_ds,V,M_Us,m_us,m_ds), 
+            res = least_squares(solve_for_ys, ys, args=(v_us,v_ds,V,M_Us,m_us,m_ds), 
                         loss = "linear", method= "trf", jac = "3-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2,2)) #
         ys = res.x
        # print(res.cost)
         if res.cost < cost_tol and all(np.abs(ys) > 0.01):
             successes += 1
             if alt:
-                y_ds = np.insert(ys[13:],0,y3_d) 
-                y_us = np.insert(ys[:13],0,y3_u)
+                y_ds = ys[14:]
+                y_us = ys[:14]
                 
             else:
-                y_ds = np.insert(ys[12:],0,y3_d) 
-                y_us = np.insert(ys[:12],0,y3_u)
+                pass
+                #y_ds = np.insert(ys[12:],0,y3_d) 
+                #y_us = np.insert(ys[:12],0,y3_u)
 
             tmp_list = [y_us, y_ds, M_Us, tan_beta, g_idx]
             if verbose:
@@ -463,13 +461,8 @@ def refine_y_models_old(filename, y_model_list, g_model_list, cost_tol = 0.5, ma
         # print(np.min(np.abs(ys)) )
         if res.cost < cost_tol and all(np.abs(ys) > 0.01):
             successes += 1
-            if alt:
-                y_ds = np.insert(ys[13:],0,y3_d) 
-                y_us = np.insert(ys[:13],0,y3_u)
-                
-            else:
-                y_ds = np.insert(ys[12:],0,y3_d) 
-                y_us = np.insert(ys[:12],0,y3_u)
+            y_ds = np.insert(ys[12:],0,y3_d) 
+            y_us = np.insert(ys[:12],0,y3_u)
 
             tmp_list = [y_us, y_ds, M_Us, tan_beta, g_idx]
             if verbose:
@@ -523,12 +516,12 @@ if __name__ == "__main__":
     y_plotting = True
     g_model_list = get_g_models("correct_g_models.npz", g, search_for_gs)
 
-    #y_filename = "y_models_corr_dof_26_1.npz"
+    y_filename = "y_models_dof_28_1.npz"
     #y_filename = "valid_y_models.npz"
-    y_filename = "refined_y_dof_26_1.npz"
+    #y_filename = "refined_y_dof_26_1.npz"
     y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=50, verbose=False, alt = True)
 
-    #y_model_list = refine_y_models("refined_y_dof_26_1.npz", y_model_list, g_model_list, cost_tol=0.3, max_iters=100, verbose=True)
+    y_model_list = refine_y_models("refined_y_dof_28_1.npz", y_model_list, g_model_list, cost_tol=0.25, max_iters=100, verbose=True)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
@@ -651,8 +644,8 @@ if __name__ == "__main__":
             sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
             tot_L_diffs = []
             V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L)
-            in_ys = np.concatenate((y_us[1:], y_ds[1:]))             
-            compares = alt_solve_for_ys(in_ys, g, g_prim, y_us[0], y_ds[0], v_us, v_ds, V, y_model[2], m_us, m_ds)
+            in_ys = np.concatenate((y_us, y_ds))             
+            compares = alt_solve_for_ys(in_ys, g, g_prim, v_us, v_ds, V, y_model[2], m_us, m_ds)
             # print(compares)
             # print(compares**2)
             cost = np.sum(compares**2)
