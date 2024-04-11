@@ -3,9 +3,6 @@
 #####################################################################################
 import flavorstuff as fs
 import numpy as np
-import GPy
-import sympy as sp
-import json
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 

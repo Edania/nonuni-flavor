@@ -134,7 +134,7 @@ def diag_yukawa(Y):
     U = U[:,::-1]
     Delta = Delta_tmp[::-1]
     Vh = Vh[::-1,:]
-    return U,Delta,Vh
+    return U.T,Delta,Vh.T
 
 # Method for finding the mass basis for Q given left- or right-rotating unitary matrix
 def mass_Q(V, Q, U=None):
