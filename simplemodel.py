@@ -308,7 +308,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                         real_M_Us = diag_yukawa_u[3:]
                         real_M_Ds = diag_yukawa_d[3:]
                         base = V[:,1]
-                        base_SM = np.array([1, -conts.sw2])
+                        base_SM = get_base_Z(g,g_prim)
                         # base_SM_gamma = np.array([0, conts.e_em])
                         # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
                         #base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
@@ -392,7 +392,7 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
                 real_M_Us = diag_yukawa_u[3:]
                 real_M_Ds = diag_yukawa_d[3:]
                 base = V[:,1]
-                base_SM = get_base_Z()
+                base_SM = get_base_Z(g,g_prim)
                 # base_SM_gamma = np.array([0, conts.e_em])
                 # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
                 #base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
@@ -413,8 +413,8 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
                 print("Successful model")
                 print(f"y_us: {y_us}\n y_ds: {y_ds}\n M_Us: {real_M_Us}\n M_Ds: {real_M_Ds}\n tan_beta = {tan_beta}\n g_idx = {g_idx}")
             model_list.extend(tmp_list)
-        if model_list:
-            np.savez(filename, *model_list)
+    if model_list:
+        np.savez(filename, *model_list)
     
     y_models = np.load(filename)
     ex_model_list = [y_models[k] for k in y_models]
@@ -516,12 +516,12 @@ if __name__ == "__main__":
     y_plotting = True
     g_model_list = get_g_models("correct_g_models.npz", g, search_for_gs)
 
-    y_filename = "y_models_dof_28_1.npz"
+    #y_filename = "y_models_dof_28_1.npz"
     #y_filename = "valid_y_models.npz"
-    #y_filename = "refined_y_dof_26_1.npz"
+    y_filename = "refined_y_dof_28_2.npz"
     y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=50, verbose=False, alt = True)
 
-    y_model_list = refine_y_models("refined_y_dof_28_1.npz", y_model_list, g_model_list, cost_tol=0.25, max_iters=100, verbose=True)
+    y_model_list = refine_y_models("refined_y_dof_28_3.npz", y_model_list, g_model_list, cost_tol=0.25, max_iters=None, verbose=False)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
