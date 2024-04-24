@@ -38,9 +38,10 @@ def get_delta2_V(g, gs, vs):
 # Function for minimize() that finds the gs that give the Z-boson mass
 # There should be an exact analytical solution to this.
 def closest_Z_mass(gs, mzs,g, vs):
-    M_b = build_M_b(g,gs,vs)
-    Delta2, V = fs.gauge_boson_basis(M_b) 
-    return np.sqrt(Delta2[1:]) - mzs
+    #M_b = build_M_b(g,gs,vs)
+    #Delta2, V = fs.gauge_boson_basis(M_b) 
+    Delta2, V = get_delta2_V(g,gs,vs)
+    return np.sqrt(2*Delta2[1:]) - mzs
 
 # Returns the basis for the Z-coupling in the standard model, with [I_L3, Q]
 def get_base_Z(g,g_prim):
@@ -188,7 +189,7 @@ def alt_solve_for_ys(ys,g,g_prim,v_us,v_ds, V, M_Us, m_us, m_ds):
 
     return compares
 
-def get_g_models(filename, g, search_for_gs = False):
+def get_g_models(filename, g, search_for_gs = False, verbose = False):
     if search_for_gs:
         v_chis = np.arange(1000,10000,10)
         m_Z3s = np.arange(1000,10000,10)
@@ -209,15 +210,17 @@ def get_g_models(filename, g, search_for_gs = False):
                 mzs = np.array([conts.m_Z, m_Z3, m_Z3prim, m_Z12])
                 gs, infodict,ier,mesg = fsolve(closest_Z_mass, gs,args=(mzs, g, vs), full_output=True, factor = 0.1)
                 diff = infodict["fvec"]
+                #print(gs)
                 
-                if all(gs <= 2)  and all(gs > 0.01) and np.abs(diff) < 1e-5:
+                if all(gs <= 2)  and all(gs > 0.01) and all(np.abs(diff) < 1e-5):
                     tmp_list = [mzs, vs, gs]
                     model_list.append(tmp_list)
-                    print(f"Successful model")
-                    print(f"gs: {gs}")
-                    print(f"vs : {vs}")
-                    print(f"mzs: {mzs}")
-                    print(f"Diff m_Zs = {diff}")                    
+                    if verbose:
+                        print(f"Successful model")
+                        print(f"gs: {gs}")
+                        print(f"vs : {vs}")
+                        print(f"mzs: {mzs}")
+                        print(f"Diff m_Zs = {diff}")                    
         if model_list:
             np.savez(filename, *model_list)
     
@@ -370,7 +373,8 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
             res = least_squares(solve_for_ys, ys, args=(v_us,v_ds,V,M_Us,m_us,m_ds), 
                         loss = "linear", method= "trf", jac = "3-point", tr_solver="exact", max_nfev=max_iters, bounds = (-2,2)) #
         ys = res.x
-       # print(res.cost)
+        if verbose:
+            print(res.cost)
         if res.cost < cost_tol and all(np.abs(ys) > 0.01):
             successes += 1
             if alt:
@@ -504,6 +508,19 @@ def refine_y_models_old(filename, y_model_list, g_model_list, cost_tol = 0.5, ma
     print(f"The number of y_models is: {len(model_list)}")
     return model_list
 
+def pick_g_models(in_model_list, n_idxs = 1):
+    v_list = np.array([model[1,1] for model in in_model_list])
+    uniques, unique_idxs = np.unique(v_list, return_index=True)
+    unique_idxs = np.append(unique_idxs, len(v_list))
+    random_idxs = [np.random.randint(unique_idxs[i],unique_idxs[i+1], n_idxs) if n_idxs <= unique_idxs[i+1]-unique_idxs[i] 
+                   else np.random.randint(unique_idxs[i],unique_idxs[i+1],unique_idxs[i+1]-unique_idxs[i]) 
+                   for i in range(len(unique_idxs)-1)
+                   ]
+    random_idxs = np.concatenate(random_idxs).ravel()
+    out_model_list = [in_model_list[idx] for idx in random_idxs]
+    print(v_list[random_idxs])
+    return out_model_list
+
 if __name__ == "__main__":
     # According to definition
     g = conts.e_em/np.sqrt(conts.sw2)
@@ -514,14 +531,16 @@ if __name__ == "__main__":
     search_for_ys = False
     g_plotting = False
     y_plotting = True
-    g_model_list = get_g_models("correct_g_models.npz", g, search_for_gs)
+    g_model_list = get_g_models("correct_g_models_again.npz", g, search_for_gs)
 
-    #y_filename = "y_models_dof_28_1.npz"
+    g_model_list = pick_g_models(g_model_list, n_idxs=5)
+
+    y_filename = "y_models_dof_28_2.npz"
     #y_filename = "valid_y_models.npz"
-    y_filename = "refined_y_dof_28_2.npz"
-    y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=50, verbose=False, alt = True)
+    #y_filename = "refined_y_dof_28_2.npz"
+    y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)
 
-    y_model_list = refine_y_models("refined_y_dof_28_3.npz", y_model_list, g_model_list, cost_tol=0.25, max_iters=None, verbose=False)
+    y_model_list = refine_y_models("refined_y_dof_28_1_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
