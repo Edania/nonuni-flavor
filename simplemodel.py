@@ -530,17 +530,27 @@ if __name__ == "__main__":
     search_for_gs = False
     search_for_ys = False
     g_plotting = False
-    y_plotting = True
-    g_model_list = get_g_models("correct_g_models_again.npz", g, search_for_gs)
+    y_plotting = False
+    picking_gs = False
+    refining_ys = False
 
-    g_model_list = pick_g_models(g_model_list, n_idxs=5)
-
-    y_filename = "y_models_dof_28_2.npz"
+    if picking_gs:
+        g_filename = "correct_g_models_again.npz"
+    else:
+        g_filename = "saved_g_models.npz"
+    g_model_list = get_g_models(g_filename, g, search_for_gs)
+    if picking_gs:
+        g_model_list = pick_g_models(g_model_list, n_idxs=5)
+        np.savez("saved_g_models.npz", *g_model_list)
+    
+    
+    y_filename = "y_models_dof_28_3.npz"
     #y_filename = "valid_y_models.npz"
-    #y_filename = "refined_y_dof_28_2.npz"
+    #y_filename = "refined_y_dof_28_1_1.npz"
     y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)
 
-    y_model_list = refine_y_models("refined_y_dof_28_1_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
+    if refining_ys:
+        y_model_list = refine_y_models("refined_y_dof_28_1_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
@@ -706,7 +716,7 @@ if __name__ == "__main__":
             finite_idx = np.isfinite(tot_L_diffs)
             tot_L_diffs = tot_L_diffs[finite_idx]
       
-            if (tot_L_diffs > 0).all():
+            if (tot_L_diffs[0:4] > 0).all():
                 if valid_model_check:
                     print("Found valid model")
                 
@@ -725,8 +735,8 @@ if __name__ == "__main__":
 
         tan_beta_arr = np.array(tan_beta_list)
         Z_strings = ["Z", "Z_3", "Z_3'", "Z_{12}"]
-        c_strings = ["\Lambda^{sd}_{LL}", "\Lambda^{sd}_{LR}", "\Lambda^{uc}_{LL}", "\Lambda^{uc}_{LR}", "\Lambda^{bd}_{LL}",
-                     "\Lambda^{bd}_{LR}", "\Lambda^{bs}_{LL}","\Lambda^{bs}_{LR}"]
+        c_strings = ["\Lambda^{sd}_{LL}", "\Lambda^{uc}_{LL}", "\Lambda^{bd}_{LL}",
+                     "\Lambda^{bs}_{LL}"]
         simp_c_strings = ["sd_LL", "sd_LR", "uc_LL", "uc_LR", "bd_LL", "bd_LR", "bs_LL", "bs_LR"]
         fig, axs = plt.subplots(1,4,figsize=(7,3))
         lines = [None]*5
