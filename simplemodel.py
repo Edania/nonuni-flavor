@@ -530,9 +530,9 @@ if __name__ == "__main__":
     search_for_gs = False
     search_for_ys = False
     g_plotting = False
-    y_plotting = False
+    y_plotting = True
     picking_gs = False
-    refining_ys = False
+    refining_ys = True
 
     if picking_gs:
         g_filename = "correct_g_models_again.npz"
@@ -550,7 +550,7 @@ if __name__ == "__main__":
     y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)
 
     if refining_ys:
-        y_model_list = refine_y_models("refined_y_dof_28_1_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
+        y_model_list = refine_y_models("refined_y_dof_28_2_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
