@@ -43,14 +43,7 @@ def closest_Z_mass(gs, mzs,g, vs):
     Delta2, V = get_delta2_V(g,gs,vs)
     return np.sqrt(2*Delta2[1:]) - mzs
 
-# Returns the basis for the Z-coupling in the standard model, with [I_L3, Q]
-def get_base_Z(g,g_prim):
-    return np.sqrt(g**2 + g_prim**2)*np.array([1, -conts.sw2])
 
-# Returns the basis for the gamma-coupling in the standard model, with [I_L3, Q]
-def get_base_gamma():
-    return np.array([0, conts.e_em])
-    
 # Builds the yukawa matrix as specified in the article. 
 # VEVs are treated unnormalized prior to this
 def build_yukawa(ys, ms, vs, alt = False):
@@ -178,8 +171,8 @@ def alt_solve_for_ys(ys,g,g_prim,v_us,v_ds, V, M_Us, m_us, m_ds):
     m_u_compare = diag_yukawa_u[:3] - m_us
     m_d_compare = diag_yukawa_d[:3] - m_ds
     
-    base_SM_Z = get_base_Z(g,g_prim)
-    base_SM_gamma = get_base_gamma()
+    base_SM_Z = fs.get_base_Z(g,g_prim)
+    base_SM_gamma = fs.get_base_gamma()
     compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
                                  Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
     
@@ -311,7 +304,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                         real_M_Us = diag_yukawa_u[3:]
                         real_M_Ds = diag_yukawa_d[3:]
                         base = V[:,1]
-                        base_SM = get_base_Z(g,g_prim)
+                        base_SM = fs.get_base_Z(g,g_prim)
                         # base_SM_gamma = np.array([0, conts.e_em])
                         # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
                         #base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
@@ -396,7 +389,7 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
                 real_M_Us = diag_yukawa_u[3:]
                 real_M_Ds = diag_yukawa_d[3:]
                 base = V[:,1]
-                base_SM = get_base_Z(g,g_prim)
+                base_SM = fs.get_base_Z(g,g_prim)
                 # base_SM_gamma = np.array([0, conts.e_em])
                 # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
                 #base_SM = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
@@ -532,7 +525,7 @@ if __name__ == "__main__":
     g_plotting = False
     y_plotting = True
     picking_gs = False
-    refining_ys = True
+    refining_ys = False
 
     if picking_gs:
         g_filename = "correct_g_models_again.npz"
@@ -544,9 +537,9 @@ if __name__ == "__main__":
         np.savez("saved_g_models.npz", *g_model_list)
     
     
-    y_filename = "y_models_dof_28_3.npz"
+    #y_filename = "y_models_dof_28_3.npz"
     #y_filename = "valid_y_models.npz"
-    #y_filename = "refined_y_dof_28_1_1.npz"
+    y_filename = "refined_y_dof_28_2_1.npz"
     y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)
 
     if refining_ys:
@@ -559,6 +552,7 @@ if __name__ == "__main__":
         f  = open("saved_g_regrs.txt", "w")
         g1_list = [model[2,0] for model in g_model_list]
         g2_list = [model[2,1] for model in g_model_list]
+        g12_list = [model[2,1]+ model[2,0] for model in g_model_list]
         v_strings = ["\chi", "\phi", "\sigma"]
         m_strings = ["Z_3", "Z_3'", "Z_{12}"]
         for i in range(1,4):
@@ -636,6 +630,10 @@ if __name__ == "__main__":
         g_idx_list = [int(model[4]) for model in y_model_list]
         cost_list = []
         real_Lambda_effs = get_lambda_limits()
+        sd_list = []
+        uc_list = []
+        bd_list = []
+        bs_list = []
 
         for y_model in y_model_list:
             y_us = np.array(y_model[0])
@@ -668,7 +666,7 @@ if __name__ == "__main__":
             
             #print(diag_yukawa_u[:3] - m_us)
             
-            base_SM = get_base_Z(g,g_prim)
+            base_SM = fs.get_base_Z(g,g_prim)
             sm_Q_d_L = np.diag(sm_Q("d_L", base_SM))
             sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
             tot_L_diffs = []
@@ -711,12 +709,14 @@ if __name__ == "__main__":
                 Lambda_eff = np.sqrt(1/cs)
                 Lambda_effs_list[k-1].append(Lambda_eff)
                 L_diffs = Lambda_eff - real_Lambda_effs
-                tot_L_diffs.extend(L_diffs)
+                if k == 1:
+                    tot_L_diffs.extend(L_diffs)
             tot_L_diffs = np.array(tot_L_diffs)
             finite_idx = np.isfinite(tot_L_diffs)
             tot_L_diffs = tot_L_diffs[finite_idx]
-      
-            if (tot_L_diffs[0:4] > 0).all():
+
+
+            if (tot_L_diffs > 0).all():
                 if valid_model_check:
                     print("Found valid model")
                 
@@ -737,7 +737,7 @@ if __name__ == "__main__":
         Z_strings = ["Z", "Z_3", "Z_3'", "Z_{12}"]
         c_strings = ["\Lambda^{sd}_{LL}", "\Lambda^{uc}_{LL}", "\Lambda^{bd}_{LL}",
                      "\Lambda^{bs}_{LL}"]
-        simp_c_strings = ["sd_LL", "sd_LR", "uc_LL", "uc_LR", "bd_LL", "bd_LR", "bs_LL", "bs_LR"]
+        simp_c_strings = ["sd_LL", "uc_LL", "bd_LL", "bs_LL"]
         fig, axs = plt.subplots(1,4,figsize=(7,3))
         lines = [None]*5
         for n in range(len(cs)):

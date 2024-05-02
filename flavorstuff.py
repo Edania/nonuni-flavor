@@ -56,6 +56,7 @@ class constants:
         self.alpha = 1/137.035999180
         self.e_em = np.sqrt(4*np.pi*self.alpha)
 
+conts = constants()
 # Method for finding the gauge boson basis given an M
 def gauge_boson_basis(M):
     MT = M.conj().T
@@ -158,4 +159,11 @@ def find_charge(type_, field, charge):
 def Z_coupling(g,g_prim):
     pass
 
+# Returns the basis for the Z-coupling in the standard model, with [I_L3, Q]
+def get_base_Z(g,g_prim):
+    return np.sqrt(g**2 + g_prim**2)*np.array([1, -conts.sw2])
+
+# Returns the basis for the gamma-coupling in the standard model, with [I_L3, Q]
+def get_base_gamma():
+    return np.array([0, conts.e_em])
     
