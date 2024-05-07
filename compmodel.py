@@ -23,13 +23,18 @@ def get_omega(theta):
                       [-np.sin(theta), 0, np.cos(theta), 0]])
     return omega
 
-def sym_term_one(F_down, y, omega, mu_1, mu_10):
-    a = (F_down @ omega.T) @ (F_down @ omega.T)
-    b = 
-    return
+def sym_term_one(F_down, y, omega, mu_1, mu_5 ,mu_10):
+    a = np.trace(F_down @ omega.T) * np.trace(F_down @ omega.T)
+    b = np.trace((F_down.T @ omega) @ (F_down @ omega.T))
+    c = -np.trace((F_down @ omega) @ (F_down @ omega.T))
+    d = -0.5*a
+    e = b
+    f = c
+    return y**2*(mu_1*a + mu_5*(b+c+d) + mu_10*(e+f))
 
-def sym_term_two():
-    pass
+def sym_term_two(F_down, F_up, y, omega, mu_1, mu_5, mu_10):
+    a = np.trace(F_down @ omega.T) * np.trace(F_up)
+    return
 
 def sym_term_three():
     pass
