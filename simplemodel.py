@@ -4,6 +4,7 @@
 import flavorstuff as fs
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from tqdm import tqdm
 
 from scipy.optimize import minimize, fsolve, least_squares, curve_fit
@@ -538,12 +539,31 @@ if __name__ == "__main__":
     
     
     #y_filename = "y_models_dof_28_3.npz"
-    #y_filename = "valid_y_models.npz"
-    y_filename = "refined_y_dof_28_2_1.npz"
-    y_model_list = get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)
+    #
+    #y_filename = "sd_list.npz"
+    #y_filename = "uc_list.npz"
+    #y_filename = "bd_list.npz"
+    #y_filename = "bd_list.npz"
+    #good_index = 1
+    looping = False
+    
+    y_filenames = ["sd_list.npz", "uc_list.npz", "bd_list.npz", "bs_list.npz"]
+    valid_filename = "valid_y_models_2.npz"
+    if looping:
+        y_model_lists = []
+        for y_filename in y_filenames:
+            y_model_lists.append(get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True))
+    else:
+        #y_filename = "y_models_dof_28_3.npz"
+        y_filename = "refined_y_dof_28_2_1.npz"
+        #y_filename = "valid_y_models.npz"
+        y_model_lists = [get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)]
 
-    if refining_ys:
-        y_model_list = refine_y_models("refined_y_dof_28_2_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
+
+    #list_names = ["sd_list.npz", "uc_list.npz", "bd_list.npz", "bs_list.npz"]
+
+    #if refining_ys:
+    #    y_model_list = refine_y_models("refined_y_dof_28_2_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
@@ -611,188 +631,254 @@ if __name__ == "__main__":
         #g1_list = [model[2,2] for model in g_model_list]        
         
     if y_plotting:
-        scatter_index = False
-        scatter_tan_beta = False
-        scatter_m_v_ratio = True
-        valid_model_check = True
+        for k, y_model_list in enumerate(y_model_lists):
+            scatter_index = False
+            scatter_tan_beta = False
+            scatter_m_v_ratio = True
+            valid_model_check =  True
+            save_Z_checks = False
 
-        if scatter_index:
-            lambda_filename = "Lambda_effs_all.png"
-        elif scatter_tan_beta:
-            lambda_filename = "Lambda_effs_tan_beta.png"
-        elif scatter_m_v_ratio:
-            lambda_filename = "Lambda_effs_m_v_ratio.png"
+            good_index = k
+            if looping:
+                y_filename = y_filenames[k]
 
-        tan_beta_list = []
-        charge_diff_list = []
-        Lambda_effs_list = [[],[],[],[]]
-        valid_model_list = []
-        g_idx_list = [int(model[4]) for model in y_model_list]
-        cost_list = []
-        real_Lambda_effs = get_lambda_limits()
-        sd_list = []
-        uc_list = []
-        bd_list = []
-        bs_list = []
+            if scatter_index:
+                lambda_filename = "Lambda_effs_all.png"
+            elif scatter_tan_beta:
+                lambda_filename = "Lambda_effs_tan_beta.png"
+            elif scatter_m_v_ratio:
+                lambda_filename = y_filename[:-4] + "Lambda_effs_m_v_ratio.png"
 
-        for y_model in y_model_list:
-            y_us = np.array(y_model[0])
-            y_ds = np.array(y_model[1])
-            M_Us = y_model[2]
-            tan_beta= y_model[3]
-            g_idx = y_model[4]
-            vs = g_model_list[g_idx][1,:]
-            gs = g_model_list[g_idx][2,:]
-            Delta2, V = get_delta2_V(g, gs, vs)   
+            tan_beta_list = []
+            charge_diff_list = []
+            Lambda_effs_list = [[],[],[],[]]
+            valid_model_list = []
+            g_idx_list = [int(model[4]) for model in y_model_list]
+            cost_list = []
+            real_Lambda_effs = get_lambda_limits()
+            sd_list = []
+            uc_list = []
+            bd_list = []
+            bs_list = []
+            all_diffs = []
+            compare_list = []
+            v_list = []
+            for y_model in y_model_list:
+                y_us = np.array(y_model[0])
+                y_ds = np.array(y_model[1])
+                M_Us = y_model[2]
+                tan_beta= y_model[3]
+                g_idx = y_model[4]
+                vs = g_model_list[g_idx][1,:]
+                v_list.append(vs[1])
+                gs = g_model_list[g_idx][2,:]
+                Delta2, V = get_delta2_V(g, gs, vs)   
 
-            # Cuts off non-significant contributions, for a cleaner model
-            #V[np.abs(V) < 0.01] = 0 
+                v_u, v_d = calc_vs(tan_beta, conts.v_H)
+                v_us = [v_u, vs[1], vs[2], vs[3]]
+                v_ds = [v_d, vs[1], vs[2], vs[3]]
+                yukawas_u = build_yukawa(y_us, M_Us, v_us, alt = True)
+                yukawas_d = build_yukawa(y_ds, M_Us, v_ds, alt = True)
+                Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
+                Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
 
-            v_u, v_d = calc_vs(tan_beta, conts.v_H)
-            v_us = [v_u, vs[1], vs[2], vs[3]]
-            v_ds = [v_d, vs[1], vs[2], vs[3]]
-            #print(len(y_us))
-            yukawas_u = build_yukawa(y_us, M_Us, v_us, alt = True)
-            yukawas_d = build_yukawa(y_ds, M_Us, v_ds, alt = True)
-            Uh_u_R, diag_yukawa_u, U_u_L = fs.diag_yukawa(yukawas_u)
-            Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
+                real_M_Us = diag_yukawa_u[3:]
+                real_M_Ds = diag_yukawa_d[3:]
 
-            real_M_Us = diag_yukawa_u[3:]
-            real_M_Ds = diag_yukawa_d[3:]
-
-            tan_beta_list.append(int(tan_beta))
-            m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
-            m_us = np.array([conts.m_u, conts.m_c, conts.m_t])        
-            
-            #print(diag_yukawa_u[:3] - m_us)
-            
-            base_SM = fs.get_base_Z(g,g_prim)
-            sm_Q_d_L = np.diag(sm_Q("d_L", base_SM))
-            sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
-            tot_L_diffs = []
-            V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L)
-            in_ys = np.concatenate((y_us, y_ds))             
-            compares = alt_solve_for_ys(in_ys, g, g_prim, v_us, v_ds, V, y_model[2], m_us, m_ds)
-            # print(compares)
-            # print(compares**2)
-            cost = np.sum(compares**2)
-            # print(cost)
-            cost_list.append(cost)
-            
-            # print(np.abs(compares[:-6]))
-            # if (np.abs(compares[:-6]) > 0.2).any():
-            #     print("Invalid model")
-            #     continue
-            for k in range(1,5):
-                base = V[:,k]
-                Q_d_L = build_Q("d_L", base)
-                Q_d_R = build_Q("d_R", base)
-
-                Q_u_L = build_Q("u_L", base)
-                Q_u_R = build_Q("u_R", base)
-
-                mass_Q_d_L = fs.mass_Q(U_d_L, Q_d_L)
-                mass_Q_d_RL = fs.mass_Q(U_d_L, Q_d_R, np.transpose(Uh_d_R))
-                mass_Q_d_LR = fs.mass_Q(np.transpose(Uh_d_R), Q_d_L,U_d_L)
-
-                mass_Q_u_L = fs.mass_Q(U_u_L, Q_u_L)
-                mass_Q_u_LR = fs.mass_Q(U_u_L, Q_u_R, np.transpose(Uh_u_R))
-                mass_Q_u_RL = fs.mass_Q(np.transpose(Uh_u_R), Q_u_L,U_u_L)
-                # Same order as in table
-                # cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_d_LR[0,1]*mass_Q_d_RL[0,1], mass_Q_u_L[0,1]**2, 
-                #                mass_Q_u_LR[0,1]*mass_Q_u_RL[0,1], mass_Q_d_L[0,2]**2, mass_Q_d_LR[0,2]*mass_Q_d_RL[0,2],
-                #                mass_Q_d_L[1,2]**2, mass_Q_d_LR[1,2]*mass_Q_d_RL[1,2]])
-                # #Absolute value ok?
-                cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_u_L[0,1]**2, 
-                                mass_Q_d_L[0,2]**2,mass_Q_d_L[1,2]**2])
-                cs = np.abs(cs)/(Delta2[k]/(1000**2))
-                Lambda_eff = np.sqrt(1/cs)
-                Lambda_effs_list[k-1].append(Lambda_eff)
-                L_diffs = Lambda_eff - real_Lambda_effs
-                if k == 1:
-                    tot_L_diffs.extend(L_diffs)
-            tot_L_diffs = np.array(tot_L_diffs)
-            finite_idx = np.isfinite(tot_L_diffs)
-            tot_L_diffs = tot_L_diffs[finite_idx]
-
-
-            if (tot_L_diffs > 0).all():
-                if valid_model_check:
-                    print("Found valid model")
+                tan_beta_list.append(int(tan_beta))
+                m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
+                m_us = np.array([conts.m_u, conts.m_c, conts.m_t])        
                 
-                    g_model = g_model_list[y_model[4]]
-                    print(f"y_model: {y_model}")
-                    print(f"g_model: {g_model}")
-                    print(f"M_Us: {real_M_Us}")
-                    print(f"M_Ds: {real_M_Ds}")
-                valid_model_list.extend(y_model)
+                tot_L_diffs = []
+                in_ys = np.concatenate((y_us, y_ds))             
+                compares = alt_solve_for_ys(in_ys, g, g_prim, v_us, v_ds, V, y_model[2], m_us, m_ds)
+                compare_list.append(compares)
+                cost = np.sum(compares**2)
+                cost_list.append(cost)
 
-        np.savez("valid_y_models.npz", *valid_model_list)
+                for k in range(1,5):
+                    base = V[:,k]
+                    Q_d_L = build_Q("d_L", base)
+                    Q_d_R = build_Q("d_R", base)
 
-        avg_cost = np.average(cost_list)
-        print(f"The average cost function was {avg_cost}")
+                    Q_u_L = build_Q("u_L", base)
+                    Q_u_R = build_Q("u_R", base)
+
+                    mass_Q_d_L = fs.mass_Q(U_d_L, Q_d_L)
+                    #mass_Q_d_RL = fs.mass_Q(U_d_L, Q_d_R, np.transpose(Uh_d_R))
+                    #mass_Q_d_LR = fs.mass_Q(np.transpose(Uh_d_R), Q_d_L,U_d_L)
+
+                    mass_Q_u_L = fs.mass_Q(U_u_L, Q_u_L)
+                    #mass_Q_u_LR = fs.mass_Q(U_u_L, Q_u_R, np.transpose(Uh_u_R))
+                    #mass_Q_u_RL = fs.mass_Q(np.transpose(Uh_u_R), Q_u_L,U_u_L)
+                    # Same order as in table
+                    # cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_d_LR[0,1]*mass_Q_d_RL[0,1], mass_Q_u_L[0,1]**2, 
+                    #                mass_Q_u_LR[0,1]*mass_Q_u_RL[0,1], mass_Q_d_L[0,2]**2, mass_Q_d_LR[0,2]*mass_Q_d_RL[0,2],
+                    #                mass_Q_d_L[1,2]**2, mass_Q_d_LR[1,2]*mass_Q_d_RL[1,2]])
+                    # #Absolute value ok?
+                    cs = np.array([mass_Q_d_L[0,1]**2, mass_Q_u_L[0,1]**2, 
+                                    mass_Q_d_L[0,2]**2,mass_Q_d_L[1,2]**2])
+                    cs = np.abs(cs)/(Delta2[k]/(1000**2))
+                    Lambda_eff = np.sqrt(1/cs)
+                    Lambda_effs_list[k-1].append(Lambda_eff)
+                    L_diffs = Lambda_eff - real_Lambda_effs
+                    tot_L_diffs.extend(L_diffs)
+                    if k == 1:
+                        if save_Z_checks:
+                            if L_diffs[0] >= 0:
+                                #print("found sd")
+                                sd_list.extend(y_model)
+                            if L_diffs[1] >= 0:
+                                #print("found uc")
+                                uc_list.extend(y_model)
+                            if L_diffs[2] >= 0:
+                                #print("found bd")
+                                bd_list.extend(y_model)
+                            if L_diffs[3] >= 0:
+                                #print("found bs")
+                                bs_list.extend(y_model)
 
 
-        tan_beta_arr = np.array(tan_beta_list)
-        Z_strings = ["Z", "Z_3", "Z_3'", "Z_{12}"]
-        c_strings = ["\Lambda^{sd}_{LL}", "\Lambda^{uc}_{LL}", "\Lambda^{bd}_{LL}",
-                     "\Lambda^{bs}_{LL}"]
-        simp_c_strings = ["sd_LL", "uc_LL", "bd_LL", "bs_LL"]
-        fig, axs = plt.subplots(1,4,figsize=(7,3))
-        lines = [None]*5
-        for n in range(len(cs)):
-            if n > 3:
-               r = 1
-               xn = n-4
-            else:
-                r = 0
-                xn = n 
-            #fig = plt.figure(figsize=(3.5,3))
-            for k in range(1,5):
-                Lambda_effs = np.array(Lambda_effs_list[k-1])
-                if scatter_index:
-                    x_array = np.arange(0,len(y_model_list))
-                    limit_start = 0
-                    limit_end = len(y_model_list)
-                    xlabel = "y-model index"
-                elif scatter_tan_beta:
-                    x_array = tan_beta_arr
-                    limit_start = np.min(tan_beta_arr)
-                    limit_end = np.max(tan_beta_arr)
-                    xlabel = r"tan$(\beta)$"
-                elif scatter_m_v_ratio:
-                    #v_arr = np.array([g_model_list[g_idx][1,1] for g_idx in g_idx_list])
+                tot_L_diffs = np.array(tot_L_diffs)
+                finite_idx = np.isfinite(tot_L_diffs)
+                tot_L_diffs = tot_L_diffs[finite_idx]
+
+                all_diffs.append(tot_L_diffs)
+
+                #if (tot_L_diffs[4:] > 0).all():
+                if not looping:
+                    if (tot_L_diffs[2:] > 0).all() and tot_L_diffs[0] > 0:
+                        if valid_model_check:
+                            print("Found valid model")
+                        
+                            g_model = g_model_list[y_model[4]]
+                            print(f"y_model: {y_model}")
+                            print(f"g_model: {g_model}")
+                            print(f"M_Us: {real_M_Us}")
+                            print(f"M_Ds: {real_M_Ds}")
+                            print(f"Cost: {cost}")
+                        valid_model_list.extend(y_model)
+            if save_Z_checks:
+                np.savez("sd_list.npz", *sd_list)
+                np.savez("uc_list.npz", *uc_list)
+                np.savez("bd_list.npz", *bd_list)
+                np.savez("bs_list.npz", *bs_list)
+            np.savez(valid_filename, *valid_model_list)
+
+            avg_cost = np.average(cost_list)
+            print(f"The average cost function was {avg_cost}")
+            compare_arr = np.array(compare_list)
+            compare_avgs = np.average(compare_arr, axis = 0)
+            # 9 CKMS , 24, 3 mus, 3 mds
+            print(compare_avgs[9:33])
+
+            tan_beta_arr = np.array(tan_beta_list)
+            Z_strings = ["Z", "Z_3", "Z_3'", "Z_{12}"]
+            c_strings = [r"\Lambda_{sd}^{\text{eff}}", r"\Lambda_{uc}^{\text{eff}}", r"\Lambda_{bd}^{\text{eff}}",
+                        r"\Lambda_{bs}^{\text{eff}}"]
+            simp_c_strings = ["sd_LL", "uc_LL", "bd_LL", "bs_LL"]
+            fig, axs = plt.subplots(1,4,figsize=(7.5,3))
+            lines = [None]*5
+            if looping:
+                indices = np.arange(0,4)
+                indices = np.delete(indices, np.where(indices == good_index))
+                plus_list = [i for i in range(len(y_model_list)) if all_diffs[i][indices[0]] > 0]
+                cross_list = [i for i in range(len(y_model_list)) if all_diffs[i][indices[1]] > 0]
+                star_list = [i for i in range(len(y_model_list)) if all_diffs[i][indices[2]] > 0]
+                possibles = np.arange(0,len(y_model_list))
+                dot_list = [i for i in possibles if i not in plus_list and i not in cross_list and i not in star_list]
+            
+            for n in range(len(cs)):
+                if n > 3:
+                    r = 1
+                    xn = n-4
+                else:
+                    r = 0
+                    xn = n 
+                #fig = plt.figure(figsize=(3.5,3))
+                if not looping:
+                    end_range = 5
+                else:
+                    end_range = 2
+                for k in range(1,end_range):
+                    Lambda_effs = np.array(Lambda_effs_list[k-1])
+                    if scatter_index:
+                        x_array = np.arange(0,len(y_model_list))
+                        limit_start = 0
+                        limit_end = len(y_model_list)
+                        xlabel = "y-model index"
+                    elif scatter_tan_beta:
+                        x_array = tan_beta_arr
+                        limit_start = np.min(tan_beta_arr)
+                        limit_end = np.max(tan_beta_arr)
+                        xlabel = r"tan$(\beta)$"
+                    elif scatter_m_v_ratio:
+                        #v_arr = np.array([g_model_list[g_idx][1,1] for g_idx in g_idx_list])
+                        
+                        v_arr , _ = calc_vs(tan_beta_arr, conts.v_H)#tan_beta_arr*np.sqrt(conts.v_H**2/(1+tan_beta_arr**2))
+                        #v_arr = np.array(v_list)
+                        #v_arr = np.array(g_model_list[g_idx_list][1,1])
+                        M23_arr = np.array([model[2][0] for model in y_model_list])
+                        g_idx_arr = np.array([model[4] for model in y_model_list])
+                        #print(g_idx_arr)
+                        #x_array = np.array(m_u_list)/v_arr
+                        x_array = v_arr/M23_arr
+                       # x_array = g_idx_arr
+                        xlabel = "$v_u/M_{[23]}$"
+                        
+                    if not looping:
+                        line = axs[xn].scatter(x_array,Lambda_effs[:,n], s = 5, label = f"${Z_strings[k-1]}$", zorder = 5-k, alpha = 0.5)
+                        lines[k-1] = line
+                    else:
+                        lines[0] = axs[xn].scatter(x_array[plus_list],Lambda_effs[plus_list,n], s = None, label = f"${simp_c_strings[indices[0]][:2]}, {simp_c_strings[good_index][:2]}$", zorder = 4, alpha = 0.5, marker = '+')
+                        lines[1] = axs[xn].scatter(x_array[cross_list],Lambda_effs[cross_list,n], s = None, label = f"${simp_c_strings[indices[1]][:2]}, {simp_c_strings[good_index][:2]}$", zorder = 3, alpha = 0.5, marker = 'x')
+                        lines[2] = axs[xn].scatter(x_array[star_list],Lambda_effs[star_list,n], s = None, label = f"${simp_c_strings[indices[2]][:2]}, {simp_c_strings[good_index][:2]}$", zorder = 2, alpha = 0.5, marker = '*')
+                        lines[3] = axs[xn].scatter(x_array[dot_list],Lambda_effs[dot_list,n], s = 5, label = f"${simp_c_strings[good_index][:2]}$", zorder = 1, alpha = 0.5)
                     
-                    v_arr = tan_beta*np.sqrt(conts.v_H**2/(1+tan_beta_arr**2))
-                    #v_arr = np.array(g_model_list[g_idx_list][1,1])
-                    M23_arr = np.array([model[2][0] for model in y_model_list])
-                    #x_array = np.array(m_u_list)/v_arr
-                    x_array = v_arr/M23_arr
-                    limit_start = np.min(x_array)
-                    limit_end = np.max(x_array)
-                    xlabel = "$v_u/M_{[23]}$"
-                    axs[xn].set_xscale("log")
-                line = axs[xn].scatter(x_array,Lambda_effs[:,n], s = 2, label = f"${Z_strings[k-1]}$", zorder = 5-k, alpha = 0.5)
-                lines[k-1] = line
-            line = axs[xn].hlines(real_Lambda_effs[n], limit_start, limit_end, color = "black", label = "Limit", zorder = 5)
-            lines[4] = line
-            #plt.scatter(tan_beta_list, m_u_list)
-            #plt.scatter(np.array(v_chi_list)[g_idx_list], m_u_list, s = 2)
-            #axs[r,xn].set_title(f"${c_strings[n]}$" )
-            axs[xn].set_xlabel(xlabel)
-            axs[xn].set_ylabel(f"${c_strings[n]}$ [log(TeV)]")
-            axs[xn].set_yscale("log")
-
-            #plt.ylim(0,10000)
-            # if n == 6:
-            #     axs[r,xn].legend(loc='lower center', bbox_to_anchor = (0,-1), ncol=5)
-            # #axs[n].tight_layout()
-        plt.suptitle("Each $\Lambda_{eff}$ for each y-model and neutral massive boson")
-        #plt.legend(loc='upper center', bbox_to_anchor=(0.1, -0.8), ncol=5)
-        fig.legend(handles = lines, loc = "lower center", ncols = 5, bbox_to_anchor = (0.5,0))
-        plt.tight_layout(rect=[0, 0.08, 1, 1])
-        plt.savefig(f"figs/" + lambda_filename)
-        #plt.savefig(f"figs/Lambda_effs_{simp_c_strings[n]}.png")
+                #limit_start = np.min(x_array)
+                #limit_end = np.max(x_array)
+                #print(limit_start)
+                #print(limit_end)
+                limit_start = 0.02
+                limit_end = 0.2
+                        
+                line = axs[xn].hlines(real_Lambda_effs[n], limit_start, limit_end, color = "black", label = "Limit", zorder = 5)
+                lines[4] = line
+                #plt.scatter(tan_beta_list, m_u_list)
+                #plt.scatter(np.array(v_chi_list)[g_idx_list], m_u_list, s = 2)
+                #axs[r,xn].set_title(f"${c_strings[n]}$" )
+                f = mticker.ScalarFormatter(useOffset=False, useMathText=True)
+                f.set_scientific(False)
+                f.set_powerlimits((-10,10))
+                f2 = mticker.ScalarFormatter(useOffset=False, useMathText=True)
+                f2.set_scientific(False)
+                f2.set_powerlimits((-10,10))
+                #f2.set_locs([0.02,0.2])
+                
+                axs[xn].set_xlabel(xlabel)
+                axs[xn].set_ylabel(f"${c_strings[n]}$ [log(TeV)]")
+                axs[xn].set_yscale("log")
+                #axs[xn].set_xlim([limit_start, limit_end])
+                axs[xn].set_xscale("log")
+                axs[xn].set_xlim([0.020, 0.2])
+                axs[xn].set_xticks(ticks = [0.1], labels = ["0.1"])
+                axs[xn].set_xticks(ticks= [0.02, 0.03 ,0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.2],labels = ["0.02","","","","","", "","","0.2"],minor=True) # note that with a log axis, you can't have x = 0 so that value isn't plotted.
+                
+                #plt.ylim(0,10000)
+                # if n == 6:
+                #     axs[r,xn].legend(loc='lower center', bbox_to_anchor = (0,-1), ncol=5)
+                # #axs[n].tight_layout()
+            if not looping:
+                plt.suptitle(r"Each $\Lambda^{\text{eff}}_{ij}$ for each y-model and neutral massive boson")
+            else:
+                plt.suptitle(r"$\Lambda^{\text{eff}}_{ij}$ for models with fulfilled " + simp_c_strings[good_index][:2] + " constraint for $Z$-boson")
+            #plt.legend(loc='upper center', bbox_to_anchor=(0.1, -0.8), ncol=5)
+            #plt.ticklabel_format(style = "plain")
+            
+            fig.legend(handles = lines, loc = "lower center", ncols = 5, bbox_to_anchor = (0.5,0))
+            plt.tight_layout(rect=[0, 0.08, 1, 1])
+            plt.savefig(f"figs/" + lambda_filename)
+            #plt.savefig(f"figs/Lambda_effs_{simp_c_strings[n]}.png")
 
         
           
