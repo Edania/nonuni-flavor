@@ -138,8 +138,11 @@ def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
     #base_SM_Z = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
     #base_SM_gamma = np.array([(g*g_prim)/np.sqrt(g**2 + g_prim**2), (g*g_prim)/np.sqrt(g**2 + g_prim**2)])
 
-    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
-                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
+#    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
+#                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
+    compare_Qs = np.concatenate(Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R),
+                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R))
+ 
  #   print(compare_Qs.shape)
     
     V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
@@ -174,8 +177,10 @@ def alt_solve_for_ys(ys,g,g_prim,v_us,v_ds, V, M_Us, m_us, m_ds):
     
     base_SM_Z = fs.get_base_Z(g,g_prim)
     base_SM_gamma = fs.get_base_gamma()
-    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
-                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
+#    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
+#                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
+    compare_Qs = np.concatenate(Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R),
+                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R))
     
     V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
     CKM_compare = (np.abs(V_CKM_calc[:3,:3])-np.abs(conts.V_CKM)).flatten()
@@ -186,7 +191,8 @@ def alt_solve_for_ys(ys,g,g_prim,v_us,v_ds, V, M_Us, m_us, m_ds):
 def get_g_models(filename, g, search_for_gs = False, verbose = False):
     if search_for_gs:
         v_chis = np.arange(1000,10000,10)
-        m_Z3s = np.arange(1000,10000,10)
+        #m_Z3s = np.arange(1000,10000,10)
+        m_Z3s = np.arange(4000,10000,(10000-4000)/len(v_chi))
         model_list = []
         tmp_list = []
         for v_chi in tqdm(v_chis):
@@ -195,18 +201,20 @@ def get_g_models(filename, g, search_for_gs = False, verbose = False):
             for m_Z3 in m_Z3s: 
                 #print(f"On m_z3 {m_Z3}")
                 v_phi = int(v_chi*np.random.uniform(1.5,5))
-                v_sigma = 10*v_chi + np.random.randint(0,100)
+                #v_sigma = 10*v_chi + np.random.randint(0,100)
+                v_sigma = int(v_phi*np.random.uniform(2,8))
                 m_Z3prim = int(m_Z3*np.random.uniform(1.5,5))
-                m_Z12 = m_Z3*10 + np.random.randint(0,100)
+                m_Z12 = int(m_Z3prim*np.random.uniform(2,8))
+                #m_Z12 = m_Z3*10 + np.random.randint(0,100)
                 # Let's do this fsolve for a range of ms and vs, with conditions on the grid :)
-                gs = np.random.uniform(0.01,2,4)
+                gs = np.random.uniform(0.01,5,4)
                 vs = np.array([conts.v_H, v_chi, v_phi, v_sigma])
                 mzs = np.array([conts.m_Z, m_Z3, m_Z3prim, m_Z12])
                 gs, infodict,ier,mesg = fsolve(closest_Z_mass, gs,args=(mzs, g, vs), full_output=True, factor = 0.1)
                 diff = infodict["fvec"]
                 #print(gs)
                 
-                if all(gs <= 2)  and all(gs > 0.01) and all(np.abs(diff) < 1e-5):
+                if all(gs <= 5)  and all(gs > 0.01) and all(np.abs(diff) < 1e-5):
                     tmp_list = [mzs, vs, gs]
                     model_list.append(tmp_list)
                     if verbose:
@@ -236,7 +244,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
         m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
         m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
         successes = 0
-        M_23s = np.linspace(1000,10000, m_repeats)
+        M_23s = np.linspace(1000,15000, m_repeats)
         #M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
 
         for g_idx, g_model in enumerate(tqdm(g_model_list)):
@@ -252,8 +260,10 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
             valid_idxs = np.argwhere(M_23s > vs[1]).flatten()
             for idx in valid_idxs:
                 M_23 = M_23s[idx]
-                M_12 = 10*M_23 + np.random.randint(1,100)
+                M_12 = np.random(6,14)*M_23
+                #M_12 = 10*M_23 + np.random.randint(1,100)
                 tan_beta = np.random.randint(10,100)
+                #tan_beta = 10
                 #M_23 = np.random.randint(1000,10000)
                 
                 M_Us = np.array([M_23, M_23, M_12])
@@ -515,36 +525,43 @@ def pick_g_models(in_model_list, n_idxs = 1):
     print(v_list[random_idxs])
     return out_model_list
 
+
+def calc_grid(g_model_list, m_repeats):
+    M_23s = np.linspace(1000,10000, m_repeats)
+    #M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
+    c_sum = 0
+    for g_idx, g_model in enumerate(tqdm(g_model_list)):
+        vs = g_model[1,:]
+        valid_idxs = np.argwhere(M_23s > vs[1]).flatten()
+        c_sum += len(valid_idxs)
+    return c_sum
+
 if __name__ == "__main__":
     # According to definition
     g = conts.e_em/np.sqrt(conts.sw2)
     g_prim = conts.e_em/np.sqrt(1-conts.sw2)
     
     # Get models for gs
-    search_for_gs = False
+    search_for_gs = True
     search_for_ys = False
     g_plotting = False
-    y_plotting = True
+    y_plotting = False
     picking_gs = False
     refining_ys = False
 
     if picking_gs:
-        g_filename = "correct_g_models_again.npz"
+        #g_filename = "correct_g_models_again.npz"
+        g_filename = "g_models_wide.npz"
     else:
-        g_filename = "saved_g_models.npz"
+        #g_filename = "saved_g_models.npz"
+        g_filename = "saved_g_models_wide.npz"
     g_model_list = get_g_models(g_filename, g, search_for_gs)
     if picking_gs:
         g_model_list = pick_g_models(g_model_list, n_idxs=5)
-        np.savez("saved_g_models.npz", *g_model_list)
+        np.savez("saved_g_models_wide.npz", *g_model_list)
+    c_sum = calc_grid(g_model_list, 40)
+    print(c_sum)
     
-    
-    #y_filename = "y_models_dof_28_3.npz"
-    #
-    #y_filename = "sd_list.npz"
-    #y_filename = "uc_list.npz"
-    #y_filename = "bd_list.npz"
-    #y_filename = "bd_list.npz"
-    #good_index = 1
     looping = False
     
     y_filenames = ["sd_list.npz", "uc_list.npz", "bd_list.npz", "bs_list.npz"]
@@ -555,10 +572,12 @@ if __name__ == "__main__":
             y_model_lists.append(get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True))
     else:
         #y_filename = "y_models_dof_28_3.npz"
-        y_filename = "refined_y_dof_28_2_1.npz"
+        #y_filename = "refined_y_dof_28_2_1.npz"
         #y_filename = "valid_y_models.npz"
+        y_filename = "y_models_wide.npz"
         y_model_lists = [get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)]
 
+    #TODO: Check couplings for light families to new Z-bosons to ascertain lower mass limit
 
     #list_names = ["sd_list.npz", "uc_list.npz", "bd_list.npz", "bs_list.npz"]
 
@@ -608,7 +627,7 @@ if __name__ == "__main__":
 
         v_res = linregress(v_chi_list, v_phi_list)
         m_res = linregress(m_Z3_list, m_Z3prim_list)
-        fig, axs = plt.subplots(1,2, figsize = (7,5))
+        fig, axs = plt.subplots(1,2, figsize = (7,4))
         axs[0].scatter(v_chi_list, v_phi_list, s = 2, label = "data")
         axs[0].plot(v_chi_list, v_chi_list*v_res.slope + v_res.intercept, "r", label = f"slope = {v_res.slope:.3f}")
         axs[0].plot(v_chi_list, v_chi_list*1.5, label = r"$\times 1.5$ limit")
@@ -749,7 +768,7 @@ if __name__ == "__main__":
                 if not looping:
                     if (tot_L_diffs[2:] > 0).all() and tot_L_diffs[0] > 0:
                         if valid_model_check:
-                            print("Found valid model")
+                            print("\nFound valid model")
                         
                             g_model = g_model_list[y_model[4]]
                             print(f"y_model: {y_model}")
@@ -777,7 +796,8 @@ if __name__ == "__main__":
             c_strings = [r"\Lambda_{sd}^{\text{eff}}", r"\Lambda_{uc}^{\text{eff}}", r"\Lambda_{bd}^{\text{eff}}",
                         r"\Lambda_{bs}^{\text{eff}}"]
             simp_c_strings = ["sd_LL", "uc_LL", "bd_LL", "bs_LL"]
-            fig, axs = plt.subplots(1,4,figsize=(7.5,3))
+
+            fig, axs = plt.subplots(1,4,figsize=(7,2.5))
             lines = [None]*5
             if looping:
                 indices = np.arange(0,4)
