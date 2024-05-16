@@ -179,8 +179,8 @@ def alt_solve_for_ys(ys,g,g_prim,v_us,v_ds, V, M_Us, m_us, m_ds):
     base_SM_gamma = fs.get_base_gamma()
 #    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
 #                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
-    compare_Qs = np.concatenate(Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R),
-                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R))
+    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R),
+                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R)))
     
     V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
     CKM_compare = (np.abs(V_CKM_calc[:3,:3])-np.abs(conts.V_CKM)).flatten()
@@ -192,7 +192,7 @@ def get_g_models(filename, g, search_for_gs = False, verbose = False):
     if search_for_gs:
         v_chis = np.arange(1000,10000,10)
         #m_Z3s = np.arange(1000,10000,10)
-        m_Z3s = np.arange(4000,10000,(10000-4000)/len(v_chi))
+        m_Z3s = np.arange(4000,10000,(10000-4000)/len(v_chis))
         model_list = []
         tmp_list = []
         for v_chi in tqdm(v_chis):
@@ -244,7 +244,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
         m_ds = np.array([conts.m_d, conts.m_s, conts.m_b])
         m_us = np.array([conts.m_u, conts.m_c, conts.m_t])
         successes = 0
-        M_23s = np.linspace(1000,15000, m_repeats)
+        M_23s = np.linspace(1000,20000, m_repeats)
         #M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
 
         for g_idx, g_model in enumerate(tqdm(g_model_list)):
@@ -260,7 +260,9 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
             valid_idxs = np.argwhere(M_23s > vs[1]).flatten()
             for idx in valid_idxs:
                 M_23 = M_23s[idx]
-                M_12 = np.random(6,14)*M_23
+                M_12 = 0
+                while M_12 < vs[3]:
+                    M_12 = np.random.uniform(6,40)*M_23
                 #M_12 = 10*M_23 + np.random.randint(1,100)
                 tan_beta = np.random.randint(10,100)
                 #tan_beta = 10
@@ -542,13 +544,13 @@ if __name__ == "__main__":
     g_prim = conts.e_em/np.sqrt(1-conts.sw2)
     
     # Get models for gs
-    search_for_gs = True
+    search_for_gs = False
     search_for_ys = False
     g_plotting = False
-    y_plotting = False
+    y_plotting = True
     picking_gs = False
     refining_ys = False
-
+    refine_filename = "refined_valid_wide.npz"
     if picking_gs:
         #g_filename = "correct_g_models_again.npz"
         g_filename = "g_models_wide.npz"
@@ -559,13 +561,14 @@ if __name__ == "__main__":
     if picking_gs:
         g_model_list = pick_g_models(g_model_list, n_idxs=5)
         np.savez("saved_g_models_wide.npz", *g_model_list)
-    c_sum = calc_grid(g_model_list, 40)
-    print(c_sum)
+    #c_sum = calc_grid(g_model_list, 40)
+    #print(c_sum)
     
     looping = False
     
-    y_filenames = ["sd_list.npz", "uc_list.npz", "bd_list.npz", "bs_list.npz"]
-    valid_filename = "valid_y_models_2.npz"
+    y_filenames = ["sd_list_wide.npz", "uc_list_wide.npz", "bd_list_wide.npz", "bs_list_wide.npz"]
+    #valid_filename = "checked_refined_valid_wide.npz"
+    valid_filename = "checked_refined_valid_y_models_wide_oops.npz"
     if looping:
         y_model_lists = []
         for y_filename in y_filenames:
@@ -573,16 +576,17 @@ if __name__ == "__main__":
     else:
         #y_filename = "y_models_dof_28_3.npz"
         #y_filename = "refined_y_dof_28_2_1.npz"
-        #y_filename = "valid_y_models.npz"
-        y_filename = "y_models_wide.npz"
-        y_model_lists = [get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True)]
+        #y_filename = "valid_y_models_wide.npz"
+        y_filename = "checked_refined_valid_y_models_wide.npz"
+        #y_filename = "y_models_wide_again.npz"
+        y_model_lists = [get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.1, max_iters=20, m_repeats=100, verbose=False, alt = True)]
 
     #TODO: Check couplings for light families to new Z-bosons to ascertain lower mass limit
 
     #list_names = ["sd_list.npz", "uc_list.npz", "bd_list.npz", "bs_list.npz"]
 
-    #if refining_ys:
-    #    y_model_list = refine_y_models("refined_y_dof_28_2_1.npz", y_model_list, g_model_list, cost_tol=0.1, max_iters=100, verbose=False)
+    if refining_ys:
+        y_model_list = refine_y_models(refine_filename, y_model_lists[0], g_model_list, cost_tol=0.1, max_iters=None, verbose=False)
    
     # g_model: [mzs, vs, gs]
     # y_model: [y_us, y_ds, M_Us, tan_beta, g_idx]
@@ -598,7 +602,10 @@ if __name__ == "__main__":
             v_list = [model[1,i]/1000/np.sqrt(2) for model in g_model_list]
             m_list = [model[0,i]/1000 for model in g_model_list]
             res = linregress(v_list, m_list)
-            
+            #[slope],stderr,_,_ = np.linalg.lstsq(np.array(v_list).reshape(-1,1), m_list) 
+            #print(slope)   
+            #stderr=0
+            #intercept = 0
             v_s = np.array(v_list)
             m_zs = np.array(m_list)
 
@@ -654,7 +661,7 @@ if __name__ == "__main__":
             scatter_index = False
             scatter_tan_beta = False
             scatter_m_v_ratio = True
-            valid_model_check =  True
+            valid_model_check =  False
             save_Z_checks = False
 
             good_index = k
@@ -766,7 +773,8 @@ if __name__ == "__main__":
 
                 #if (tot_L_diffs[4:] > 0).all():
                 if not looping:
-                    if (tot_L_diffs[2:] > 0).all() and tot_L_diffs[0] > 0:
+                    if (tot_L_diffs > 0).all():
+                    #if (tot_L_diffs[2:] > 0).all() and tot_L_diffs[0] > 0:
                         if valid_model_check:
                             print("\nFound valid model")
                         
@@ -778,11 +786,13 @@ if __name__ == "__main__":
                             print(f"Cost: {cost}")
                         valid_model_list.extend(y_model)
             if save_Z_checks:
-                np.savez("sd_list.npz", *sd_list)
-                np.savez("uc_list.npz", *uc_list)
-                np.savez("bd_list.npz", *bd_list)
-                np.savez("bs_list.npz", *bs_list)
-            np.savez(valid_filename, *valid_model_list)
+                np.savez("sd_list_wide.npz", *sd_list)
+                np.savez("uc_list_wide.npz", *uc_list)
+                np.savez("bd_list_wide.npz", *bd_list)
+                np.savez("bs_list_wide.npz", *bs_list)
+            if valid_model_check:
+                np.savez(valid_filename, *valid_model_list)
+                print("Saved to " + valid_filename)
 
             avg_cost = np.average(cost_list)
             print(f"The average cost function was {avg_cost}")
@@ -859,7 +869,7 @@ if __name__ == "__main__":
                 #limit_end = np.max(x_array)
                 #print(limit_start)
                 #print(limit_end)
-                limit_start = 0.02
+                limit_start = 0.001
                 limit_end = 0.2
                         
                 line = axs[xn].hlines(real_Lambda_effs[n], limit_start, limit_end, color = "black", label = "Limit", zorder = 5)
@@ -880,9 +890,9 @@ if __name__ == "__main__":
                 axs[xn].set_yscale("log")
                 #axs[xn].set_xlim([limit_start, limit_end])
                 axs[xn].set_xscale("log")
-                axs[xn].set_xlim([0.020, 0.2])
-                axs[xn].set_xticks(ticks = [0.1], labels = ["0.1"])
-                axs[xn].set_xticks(ticks= [0.02, 0.03 ,0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.2],labels = ["0.02","","","","","", "","","0.2"],minor=True) # note that with a log axis, you can't have x = 0 so that value isn't plotted.
+                axs[xn].set_xlim([0.01, 0.2])
+                axs[xn].set_xticks(ticks = [0.01, 0.1], labels = ["0.01","0.1"])
+                axs[xn].set_xticks(ticks= [0.02, 0.03 ,0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.2],labels = ["","","","","","", "","","0.2"],minor=True) # note that with a log axis, you can't have x = 0 so that value isn't plotted.
                 
                 #plt.ylim(0,10000)
                 # if n == 6:
