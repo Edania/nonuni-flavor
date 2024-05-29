@@ -44,11 +44,11 @@ def closest_Z_mass(gs, mzs,g, vs):
     #return (np.sqrt(Delta2[1]) - mzs[0])**2 + np.sum(np.sqrt(Delta2[2:]) - mzs[1:])**2 + np.sqrt(np.abs(Delta2[0])) #np.abs(np.sqrt(Delta2[1]) - conts.m_Z)
 
 def gs_eq_system(vH,vchi,vphi,vsigma,mz,mz3,mz3_prim,mz12):
-    g,g1,g2,g3,g4,mz,mz3,mz3_prim,mz12,vH,vchi,vphi,vsigma = sp.symbols("g g1 g2 g3 g4 mz mz3 mz3_prim mz12 vH vchi vphi vsigma", real=True)
+    g,g1,g2,g3,g4,vH,vchi_q,vchi_l,vphi,vsigma = sp.symbols("g g1 g2 g3 g4 vH vchi_q vchi_l vphi vsigma", real=True)
     #g,g1,g2,g3,g4 = sp.symbols("g g1 g2 g3 g4", real=True)
     M_b = -sp.I*1/sp.sqrt(2)*sp.Matrix([[-g*vH/(2), g1*vH/(2), 0, 0 , 0],
-                        [0, -g1*vchi/6, g2*vchi/3,              0,                  0],
-                        [0, g1*vchi/2, -g2*vchi,                0,                  0],
+                        [0, -g1*vchi_q/6, g2*vchi_q/3,              0,                  0],
+                        [0, g1*vchi_l/2, -g2*vchi_l,                0,                  0],
                         [0, g1*vphi/2,              0,-g3*vphi/2,                   0],
                         [0, 0,                          0, g3*vsigma/2, -g4*vsigma/2]])
     print(M_b.H*M_b)
