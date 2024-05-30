@@ -296,8 +296,15 @@ def solve_for_all(thetas, g, g_prim, v_u, v_d, v_chi,m_us, m_ds, all_e = False):
     else:
         m_z_compare = [(np.sqrt(2*Delta2[1])- conts.m_Z)]#, (np.sqrt(2*Delta2[2])- 4000)]
 
-    compare_Qs = np.concatenate((y_compare_es(U_d_L, gs, all_e), y_compare_es(U_u_L, gs, all_e)))
- #  
+    compare_Qs = np.concatenate((y_compare_es(U_d_L, gs, all_e), y_compare_es(U_u_L, gs, all_e),
+                                 y_compare_es(Uh_d_R.T, gs, all_e), y_compare_es(Uh_u_R.T, gs, all_e)))
+    base_SM_Z = fs.get_base_Z(g,g_prim)
+    base_SM_gamma = fs.get_base_gamma()
+    #compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
+    #                             Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
+    
+#    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R),
+#                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R)))
     V_CKM_arr = np.array(np.abs(conts.V_CKM))
     V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
     CKM_compare = (np.abs(V_CKM_calc[:3,:3])-V_CKM_arr).flatten()
@@ -325,7 +332,7 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
         low_bound = np.append(low_bound, [1000,1000,8000, 1000,1000,8000])
         
         high_bound = np.ones(32)*5
-        high_bound = np.append(high_bound, [100000,100000,2000000, 100000,100000,2000000])
+        high_bound = np.append(high_bound, [200000,2000000,2000000, 200000,2000000,2000000])
         for idx, v_chi in enumerate(tqdm(v_chis)):
             if idx % 50 == 0:
                 print(f"\nSuccesses: {successes}")
@@ -363,9 +370,13 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
                 #ys = np.append(ys, np.random.uniform(10000,100000,1))
                 thetas = np.concatenate((ys, gs , [M_23], [M_23], np.random.uniform(10000,100000,1), vs_small), axis = None)
                 #print([v_chi, v_phi, v_sigma])
-                res = least_squares(solve_for_all, thetas, args=(g,g_prim,v_u,v_d,[v_chi, v_phi, v_sigma],m_us,m_ds, True), 
+                try:
+                    res = least_squares(solve_for_all, thetas, args=(g,g_prim,v_u,v_d,[v_chi, v_phi, v_sigma],m_us,m_ds, True), 
                                 loss = "linear", method= "trf", jac = "2-point", tr_solver="exact", max_nfev=max_iters, bounds = (low_bound,high_bound),
                                 gtol = 1e-12, ftol = 1e-12, xtol = 1e-12) #
+                except Exception as e:
+                    print("Error in least squares: ", e)
+                    continue
                 thetas = res.x
                 gs = thetas[28:32]
                 ys = thetas[:28]
@@ -375,7 +386,7 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
                 real_mzs = np.sqrt(2*Delta2[1:])
                 M_Us = thetas[32:35]
                 
-                #print(2*res.cost)
+                print(2*res.cost)
                 if (all(gs <= 5)  and all(gs > 0.01) and all(np.abs(gs) <= 5)  and all(np.abs(ys) > 0.01) and np.abs(2*res.cost) < tol
                     and all(V[:,0] > 0) and all(real_mzs[1:] > 4000) and vs[1] < M_Us[0] and vs[2] < M_Us[0] and vs[3] < M_Us[2]):
                     successes += 1
@@ -880,9 +891,9 @@ if __name__ == "__main__":
     # Get models for gs
     search_for_gs = False
     search_for_ys = False
-    search_for_all = True
+    search_for_all = False
     all_models = True
-    g_plotting = True
+    g_plotting = False
     y_plotting = True
     picking_gs = False
     refining_ys = False
@@ -897,8 +908,8 @@ if __name__ == "__main__":
         y_filenames = ["e_sd_list.npz", "e_uc_list.npz", "e_bd_list.npz", "e_bs_list.npz"]
         #valid_filename = "checked_refined_valid_wide.npz"
         #valid_filename = "p_check_refine_valid_y_models_wide.npz"
-        y_model_list, g_model_list = get_models(g_filename, y_filename, g, g_prim, search_for_all, verbose = False,
-                                                    tol = 1, max_iters=100)
+        y_model_list, g_model_list = get_models(g_filename, y_filename, g, g_prim, search_for_all, verbose = True,
+                                                    tol = 100, max_iters=100)
         if looping:
             y_model_lists = []
             for y_filename in y_filenames:
@@ -909,10 +920,10 @@ if __name__ == "__main__":
     else:
         if picking_gs:
             #g_filename = "correct_g_models_again.npz"
-            g_filename = "data/e_g_models.npz"
+            g_filename = "data/saved_g_models.npz"
         else:
             #g_filename = "saved_g_models.npz"
-            g_filename = "data/saved_e_g_models.npz"
+            g_filename = "data/saved_g_models_wide.npz"
         g_model_list = get_g_models(g_filename, g, g_prim,search_for_gs, tol=100, verbose = True, max_iters=None)
     #    if picking_gs:
     #        g_model_list = pick_g_models(g_model_list, n_idxs=1)
@@ -930,13 +941,13 @@ if __name__ == "__main__":
             for y_filename in y_filenames:
                 y_model_lists.append(get_y_models(y_filename, search_for_ys, g_model_list, cost_tol=0.3, max_iters=20, m_repeats=40, verbose=False, alt = True))
         else:
-            #y_filename = "y_models_dof_28_3.npz"
-            #y_filename = "refined_y_dof_28_2_1.npz"
-            #y_filename = "valid_y_models_wide.npz"
+            #y_filename = "data/y_models_dof_28_3.npz"
+            #y_filename = "data/refined_y_dof_28_2_1.npz"
+            #y_filename = "data/valid_y_models_wide.npz"
             #y_filename = "checked_refined_valid_y_models_wide.npz"
-            #y_filename = "p_y_models_wide_again.npz"
+            y_filename = "data/p_y_models_wide_again.npz"
             #y_filename = "p_refined_valid_wide.npz"
-            y_filename = "data/p_valid_y_models_wide.npz"
+            #y_filename = "data/p_valid_y_models_wide.npz"
             #y_filename = "p_check_refine_valid.npz"
             #y_filename = "min_y_models.npz"
             #y_filename = "rel_y_models.npz"
@@ -1023,8 +1034,8 @@ if __name__ == "__main__":
             scatter_index = False
             scatter_tan_beta = False
             scatter_m_v_ratio = True
-            valid_model_check =  True
-            save_Z_checks = True
+            valid_model_check =  False
+            save_Z_checks = False
 
             good_index = k
             if looping:
@@ -1052,6 +1063,11 @@ if __name__ == "__main__":
             compare_list = []
             v_list = []
             cs = []
+            tot_Q_d_comp = []
+            tot_Q_u_comp = []
+            sm_Q_dl = sm_Q("d_L", fs.get_base_Z(g,g_prim))
+            sm_Q_ul = sm_Q("u_L", fs.get_base_Z(g,g_prim))
+                             
             for y_model in y_model_list:
                 y_us = np.array(y_model[0])
                 y_ds = np.array(y_model[1])
@@ -1079,9 +1095,10 @@ if __name__ == "__main__":
                 m_us = np.array([conts.m_u, conts.m_c, conts.m_t])        
                 
                 tot_L_diffs = []
-                in_ys = np.concatenate((y_us, y_ds))             
-                #compares = solve_for_alls(in_ys, g, g_prim, v_us, v_ds, V, y_model[2], m_us, m_ds)
-                compares = 0
+                in_ys = np.concatenate((y_us, y_ds, gs, M_Us, vs[1:]))             
+                compares = solve_for_all(in_ys, g, g_prim, v_u, v_d, vs, m_us, m_ds, True)[:60]
+                #print(compares)
+                #compares = 0
                 compare_list.append(compares)
                 cost = np.sum(compares**2)
                 cost_list.append(cost)
@@ -1114,6 +1131,14 @@ if __name__ == "__main__":
                     L_diffs = Lambda_eff - real_Lambda_effs
                     tot_L_diffs.extend(L_diffs)
                     if k == 1:
+                        Q_compares_d = np.abs(np.diag(mass_Q_d_L)[:3])-np.diag(np.abs(sm_Q_dl))
+                        #print(f"Q-compares d: {Q_compares_d}")
+                        Q_compares_u = np.abs(np.diag(mass_Q_u_L)[:3])-np.diag(np.abs(sm_Q_ul))
+                        #print(f"Q-compares u: {Q_compares_u}")
+                        
+                        tot_Q_d_comp.append(np.sum(Q_compares_d**2))
+                        tot_Q_u_comp.append(np.sum(Q_compares_u**2))
+
                         if save_Z_checks:
                             if L_diffs[0] >= 0:
                                 #print("found sd")
@@ -1161,9 +1186,14 @@ if __name__ == "__main__":
             avg_cost = np.average(cost_list)
             print(f"The average cost function was {avg_cost}")
             compare_arr = np.array(compare_list)
-            compare_avgs = np.average(compare_arr, axis = 0)
+            compare_avgs = np.average(compare_arr, axis = 1)
+
+            tot_Q_d_comp = np.average(tot_Q_d_comp)
+            tot_Q_u_comp = np.average(tot_Q_u_comp)
+            print(f" avg Cost Qd : {tot_Q_d_comp}")
+            print(f" avg Cost Qu : {tot_Q_u_comp}")
             # 9 CKMS , 24, 3 mus, 3 mds
-            #print(compare_avgs[9:33])
+            print(compare_avgs[9:33])
 
             tan_beta_arr = np.array(tan_beta_list)
             Z_strings = ["Z", "Z_3", "Z_3'", "Z_{12}"]
