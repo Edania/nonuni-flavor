@@ -161,14 +161,16 @@ def y_compare_es(U, gs, all_e = False):
     [g1, g2, g3, g4] = gs.flatten()
     norm = np.sqrt(g4**2 * (1/g**2 + 1/g1**2 + 1/(4*g2**2) + 1/g3**2) + 1)
     # I3L, Y[3], B-L[12], I3R[2], I3R[1]
+    return [g4/norm - conts.e_em]
+    ''''''
     eq = np.array([g4/g, g4/g1, g4/(2*g2), g4/g3, 1])
     mats = []
     if all_e:
-        mats.append(np.array([g4/g, g4/g, g4/g, 0, 0, 0]))
-        mats.append(np.array([g4/(2*g2), g4/(2*g2), 0, g4/(2*g2),g4/(2*g2),g4/(2*g2)]))
-        mats.append(np.array([1,0,0,0,0,0]))
-        mats.append(np.array([0,g4/g3,0,0,0,g4/g3]))
-        mats.append(np.array([0,0,g4/g1, g4/g1, g4/g1, 0]))
+        mats.append(g*np.array([g4/g, g4/g, g4/g, 0, 0, 0]))
+        mats.append(g2*np.array([g4/(2*g2), g4/(2*g2), 0, g4/(2*g2),g4/(2*g2),g4/(2*g2)]))
+        mats.append(g4*np.array([1,0,0,0,0,0]))
+        mats.append(g3*np.array([0,g4/g3,0,0,0,g4/g3]))
+        mats.append(g1*np.array([0,0,g4/g1, g4/g1, g4/g1, 0]))
     else:
         mats.append(np.array([g4/g, g4/g, g4/g, 0, 0, 0]))
         #mats.append(np.array([g4/(2*g2), g4/(2*g2), 0, g4/(2*g2),g4/(2*g2),g4/(2*g2)]))
@@ -185,6 +187,7 @@ def y_compare_es(U, gs, all_e = False):
         #compares.append(np.diag(mass_mat[zero_idx]))
         compares.append((np.diag(mass_mat[some_idx]) - conts.e_em))
     return np.concatenate(compares)
+''''''
 
 def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
     
@@ -214,8 +217,8 @@ def solve_for_ys(ys,y3_u, y3_d,v_us,v_ds, V, M_Us, m_us, m_ds):
 
 #    compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
 #                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R), Q_compare("d", V[:,0], base_SM_gamma, U_d_L, Uh_d_R)))
-    compare_Qs = np.concatenate(Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R),
-                                 Q_compare("d", V[:,1], base_SM_Z, U_d_L, Uh_d_R))
+    compare_Qs = np.concatenate(Q_compare("u", gs*V[:,1], base_SM_Z, U_u_L, Uh_u_R),
+                                 Q_compare("d", gs*V[:,1], base_SM_Z, U_d_L, Uh_d_R))
     print(compare_Qs.shape)
     
     V_CKM_calc = np.dot(np.transpose(U_u_L), U_d_L) 
@@ -332,7 +335,7 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
         low_bound = np.append(low_bound, [1000,1000,8000, 1000,1000,8000])
         
         high_bound = np.ones(32)*5
-        high_bound = np.append(high_bound, [200000,2000000,2000000, 200000,2000000,2000000])
+        high_bound = np.append(high_bound, [100000,100000,1000000,100000,500000,4000000])
         for idx, v_chi in enumerate(tqdm(v_chis)):
             if idx % 50 == 0:
                 print(f"\nSuccesses: {successes}")
@@ -365,10 +368,14 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
 
                 gs = np.random.uniform(0.01,5, 4)
                 vs_small = np.concatenate(([v_chi], [v_phi], [v_sigma]), axis = 0)
+                low_bound[[32, 33,34]] = 0.9*M_23, 0.9*M_23, 5*M_23
                 low_bound[[35,36,37]] = 0.9*v_chi, 0.9*v_chi, 0.5*v_sigma
                 #ys = np.append(ys, np.random.uniform(1000,10000,2))
                 #ys = np.append(ys, np.random.uniform(10000,100000,1))
-                thetas = np.concatenate((ys, gs , [M_23], [M_23], np.random.uniform(10000,100000,1), vs_small), axis = None)
+                thetas = np.concatenate((ys, gs , [M_23], [M_23], np.random.uniform(6*M_23,1000000,1), vs_small), axis = None)
+                #rint(f"inits {thetas[32:]}")
+                #print(f"high bounds: {high_bound[32:]}")
+                #print(f"Low bounds: {low_bound[32:]}\n")
                 #print([v_chi, v_phi, v_sigma])
                 try:
                     res = least_squares(solve_for_all, thetas, args=(g,g_prim,v_u,v_d,[v_chi, v_phi, v_sigma],m_us,m_ds, True), 
@@ -379,17 +386,17 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
                     continue
                 thetas = res.x
                 gs = thetas[28:32]
+                l_gs = np.insert(gs, 0, g)
                 ys = thetas[:28]
                 vs_small = thetas[35:]
                 vs = np.concatenate(([conts.v_H], vs_small), axis = 0)
                 Delta2, V = get_delta2_V(g,gs,vs, alt = False)
                 real_mzs = np.sqrt(2*Delta2[1:])
                 M_Us = thetas[32:35]
-                
-                print(2*res.cost)
+                if verbose:
+                    print(2*res.cost)
                 if (all(gs <= 5)  and all(gs > 0.01) and all(np.abs(gs) <= 5)  and all(np.abs(ys) > 0.01) and np.abs(2*res.cost) < tol
                     and all(V[:,0] > 0) and all(real_mzs[1:] > 4000) and vs[1] < M_Us[0] and vs[2] < M_Us[0] and vs[3] < M_Us[2]):
-                    successes += 1
                     y_ds = thetas[14:28]
                     y_us = thetas[:14]
                     g_tmp_list = [real_mzs, vs, gs]
@@ -398,6 +405,8 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
                     v_ds = np.concatenate(([v_d], vs_small), axis = 0)
 
                     y_tmp_list = [y_us, y_ds, M_Us, tan_beta, successes]
+                    successes += 1
+                    
                     if verbose:
                         print("Successful model")
 
@@ -411,8 +420,8 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
 
                         V_CKM_calc = U_u_L.T @ U_d_L
                         print(f"CKM compare: {(np.abs(V_CKM_calc[:3,:3])-V_CKM_arr)}")
-                        e_compares = solve_for_all(thetas,g,g_prim,v_u,v_d,[v_chi, v_phi, v_sigma],m_us,m_ds, all_e = True)[:30] 
-                        print(f"e-Compares: {e_compares} (res: {np.sum(e_compares**2)})")
+                        #e_compares = solve_for_all(thetas,g,g_prim,v_u,v_d,[v_chi, v_phi, v_sigma],m_us,m_ds, all_e = True)[:30] 
+                        #print(f"e-Compares: {e_compares} (res: {np.sum(e_compares**2)})")
                         #base_SM = fs.get_base_Z(g,g_prim)
                         # base_SM_gamma = np.array([0, conts.e_em])
                         # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
@@ -421,7 +430,7 @@ def get_models(g_filename, y_filename, g, g_prim, search_for_models = False, ver
                         #sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
                         L_diffs = []
                         for k in range(1,4):
-                            base = V[:,k]
+                            base = l_gs*V[:,k]
                             
                             Q_d_L = build_Q("d_L", base)
                             Q_u_L = build_Q("u_L", base)
@@ -644,7 +653,7 @@ def get_y_models(filename, search_for_ys = False, g_model_list = None, cost_tol 
                     #sm_Q_d_R = np.diag(sm_Q("d_R", base_SM))
                     L_diffs = []
                     for k in range(1,4):
-                        base = V[:,k]
+                        base = gs*V[:,k]
                         
                         Q_d_L = build_Q("d_L", base)
                         Q_u_L = build_Q("u_L", base)
@@ -745,7 +754,7 @@ def refine_y_models(filename, y_model_list, g_model_list, cost_tol = 0.5, max_it
                 Uh_d_R, diag_yukawa_d, U_d_L = fs.diag_yukawa(yukawas_d)
                 real_M_Us = diag_yukawa_u[3:]
                 real_M_Ds = diag_yukawa_d[3:]
-                base = V[:,1]
+                base = gs*V[:,1]
                 base_SM = fs.get_base_Z(g,g_prim)
                 # base_SM_gamma = np.array([0, conts.e_em])
                 # base_SM = np.array([(g**2)/np.sqrt(g**2 + g_prim**2), (g_prim**2)/np.sqrt(g**2 + g_prim**2)])
@@ -891,7 +900,7 @@ if __name__ == "__main__":
     # Get models for gs
     search_for_gs = False
     search_for_ys = False
-    search_for_all = False
+    search_for_all = True
     all_models = True
     g_plotting = True
     y_plotting = True
@@ -902,15 +911,14 @@ if __name__ == "__main__":
     refine_filename = "e_refine.npz"
     valid_filename = "e_valid.npz"
     if all_models:
-        y_filename = "all_y_models_1.npz"
-        y_filename = "e_valid.npz"
-        g_filename = "all_g_models_1.npz"
+        y_filename = "all_y_models_2.npz"
+        g_filename = "all_g_models_2.npz"
         
         y_filenames = ["e_sd_list.npz", "e_uc_list.npz", "e_bd_list.npz", "e_bs_list.npz"]
         #valid_filename = "checked_refined_valid_wide.npz"
         #valid_filename = "p_check_refine_valid_y_models_wide.npz"
-        y_model_list, g_model_list = get_models(g_filename, y_filename, g, g_prim, search_for_all, verbose = True,
-                                                    tol = 100, max_iters=100)
+        y_model_list, g_model_list = get_models(g_filename, y_filename, g, g_prim, search_for_all, verbose = False,
+                                                    tol = 0.1, max_iters=200)
         if looping:
             y_model_lists = []
             for y_filename in y_filenames:
@@ -1103,9 +1111,10 @@ if __name__ == "__main__":
                 compare_list.append(compares)
                 cost = np.sum(compares**2)
                 cost_list.append(cost)
-
+                l_gs = np.insert(gs, 0, g)
+                
                 for k in range(1,5):
-                    base = V[:,k]
+                    base = l_gs*V[:,k]
                     Q_d_L = build_Q("d_L", base)
                     Q_d_R = build_Q("d_R", base)
 
