@@ -296,8 +296,8 @@ def solve_for_all(thetas, g, g_prim, v_u, v_d, v_chi,m_us, m_ds, all_e = False):
     else:
         m_z_compare = [(np.sqrt(2*Delta2[1])- conts.m_Z)]#, (np.sqrt(2*Delta2[2])- 4000)]
 
-    compare_Qs = np.concatenate((y_compare_es(U_d_L, gs, all_e), y_compare_es(U_u_L, gs, all_e),
-                                 y_compare_es(Uh_d_R.T, gs, all_e), y_compare_es(Uh_u_R.T, gs, all_e)))
+    compare_Qs = np.concatenate((y_compare_es(U_d_L, gs, all_e), y_compare_es(U_u_L, gs, all_e)))
+                                 #y_compare_es(Uh_d_R.T, gs, all_e), y_compare_es(Uh_u_R.T, gs, all_e)))
     base_SM_Z = fs.get_base_Z(g,g_prim)
     base_SM_gamma = fs.get_base_gamma()
     #compare_Qs = np.concatenate((Q_compare("u", V[:,1], base_SM_Z, U_u_L, Uh_u_R), Q_compare("u", V[:,0], base_SM_gamma, U_u_L, Uh_u_R),
@@ -893,17 +893,18 @@ if __name__ == "__main__":
     search_for_ys = False
     search_for_all = False
     all_models = True
-    g_plotting = False
+    g_plotting = True
     y_plotting = True
     picking_gs = False
     refining_ys = False
-    looping = False
+    looping = True
     #refine_filename = "p_refined_valid_wide.npz"
     refine_filename = "e_refine.npz"
     valid_filename = "e_valid.npz"
     if all_models:
-        y_filename = "all_y_models.npz"
-        g_filename = "all_g_models.npz"
+        y_filename = "all_y_models_1.npz"
+        y_filename = "e_valid.npz"
+        g_filename = "all_g_models_1.npz"
         
         y_filenames = ["e_sd_list.npz", "e_uc_list.npz", "e_bd_list.npz", "e_bs_list.npz"]
         #valid_filename = "checked_refined_valid_wide.npz"
@@ -1034,7 +1035,7 @@ if __name__ == "__main__":
             scatter_index = False
             scatter_tan_beta = False
             scatter_m_v_ratio = True
-            valid_model_check =  False
+            valid_model_check =  True
             save_Z_checks = False
 
             good_index = k
@@ -1073,7 +1074,7 @@ if __name__ == "__main__":
                 y_ds = np.array(y_model[1])
                 M_Us = y_model[2]
                 tan_beta= y_model[3]
-                g_idx = y_model[4]-1
+                g_idx = y_model[4]
                 vs = g_model_list[g_idx][1,:]
                 v_list.append(vs[1])
                 gs = g_model_list[g_idx][2,:]
@@ -1096,7 +1097,7 @@ if __name__ == "__main__":
                 
                 tot_L_diffs = []
                 in_ys = np.concatenate((y_us, y_ds, gs, M_Us, vs[1:]))             
-                compares = solve_for_all(in_ys, g, g_prim, v_u, v_d, vs, m_us, m_ds, True)[:60]
+                compares = solve_for_all(in_ys, g, g_prim, v_u, v_d, vs, m_us, m_ds, True)[:30]
                 #print(compares)
                 #compares = 0
                 compare_list.append(compares)
@@ -1129,7 +1130,8 @@ if __name__ == "__main__":
                     Lambda_eff = np.sqrt(1/cs)
                     Lambda_effs_list[k-1].append(Lambda_eff)
                     L_diffs = Lambda_eff - real_Lambda_effs
-                    tot_L_diffs.extend(L_diffs)
+                    if k == 1:
+                        tot_L_diffs.extend(L_diffs)
                     if k == 1:
                         Q_compares_d = np.abs(np.diag(mass_Q_d_L)[:3])-np.diag(np.abs(sm_Q_dl))
                         #print(f"Q-compares d: {Q_compares_d}")
@@ -1162,8 +1164,8 @@ if __name__ == "__main__":
 
                 #if (tot_L_diffs[4:] > 0).all():
                 if not looping:
-                    if (tot_L_diffs > 0).all():
-                    #if (tot_L_diffs[2:] > 0).all() and tot_L_diffs[0] > 0:
+                    #if (tot_L_diffs > 0).all():
+                    if (tot_L_diffs[2:] > 0).all() and tot_L_diffs[0] > 0:
                         if valid_model_check:
                             print("\nFound valid model")
                         
@@ -1193,7 +1195,7 @@ if __name__ == "__main__":
             print(f" avg Cost Qd : {tot_Q_d_comp}")
             print(f" avg Cost Qu : {tot_Q_u_comp}")
             # 9 CKMS , 24, 3 mus, 3 mds
-            print(compare_avgs[9:33])
+            #print(compare_avgs[9:33])
 
             tan_beta_arr = np.array(tan_beta_list)
             Z_strings = ["Z", "Z_3", "Z_3'", "Z_{12}"]
@@ -1246,6 +1248,7 @@ if __name__ == "__main__":
                         g_idx_arr = np.array([model[4] for model in y_model_list])
                         #print(g_idx_arr)
                         #x_array = np.array(m_u_list)/v_arr
+                        #x_array = v_arr
                         x_array = v_arr/M23_arr
                        # x_array = g_idx_arr
                         xlabel = "$v_u/M_{[23]}$"
@@ -1263,8 +1266,8 @@ if __name__ == "__main__":
                 #limit_end = np.max(x_array)
                 #print(limit_start)
                 #print(limit_end)
-                limit_start = 0.001
-                limit_end = 0.2
+                limit_start = 240/100000
+                limit_end = 0.02
                         
                 line = axs[xn].hlines(real_Lambda_effs[n], limit_start, limit_end, color = "black", label = "Limit", zorder = 5)
                 lines[4] = line
@@ -1282,11 +1285,11 @@ if __name__ == "__main__":
                 axs[xn].set_xlabel(xlabel)
                 axs[xn].set_ylabel(f"${c_strings[n]}$ [log(TeV)]")
                 axs[xn].set_yscale("log")
-                #axs[xn].set_xlim([limit_start, limit_end])
+                axs[xn].set_xlim([limit_start, limit_end])
                 axs[xn].set_xscale("log")
                 #axs[xn].set_xlim([0.01, 0.2])
-                axs[xn].set_xticks(ticks = [0.01, 0.1], labels = ["0.01","0.1"])
-                axs[xn].set_xticks(ticks= [0.02, 0.03 ,0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.2],labels = ["","","","","","", "","","0.2"],minor=True) # note that with a log axis, you can't have x = 0 so that value isn't plotted.
+                axs[xn].set_xticks(ticks = [0.01], labels = [r"$10^{-2}$"])
+                axs[xn].set_xticks(ticks= [0.002, 0.0024, 0.003 ,0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.02],labels = ["","$2.4\cdot10^{-2}$","","","","","", "","",""],minor=True) # note that with a log axis, you can't have x = 0 so that value isn't plotted.
                 
                 #plt.ylim(0,10000)
                 # if n == 6:
