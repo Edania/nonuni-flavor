@@ -525,17 +525,10 @@ def calc_vs(tan_beta, v_H):
 def calc_grid():
     v_chis = np.arange(5000,100000,100)
     M_23s = np.arange(5000,100000,1000)
-    #M_23s = np.linspace(1000,10000, m_repeats)
-    #M_12s = 10*M_23s + np.random.randint(1,100, len(M_23s))
     c_sum = 0
     for v_chi in tqdm(v_chis):
         valid_idxs = np.argwhere(M_23s > v_chi).flatten()
         c_sum += len(valid_idxs)
-    
-#    for g_idx, g_model in enumerate(tqdm(g_model_list)):
-#        vs = g_model[1,:]
-#        valid_idxs = np.argwhere(M_23s > vs[1]).flatten()
-#        c_sum += len(valid_idxs)
     return c_sum
 
 def calc_confidence(x_arr,slope, intercept, slope_err, intercept_err):
